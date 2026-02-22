@@ -1,0 +1,14 @@
+fastapi
+uvicorn
+pydantic
+pydantic-settings
+SQLAlchemy
+aiosqlite
+greenlet
+httpx
+PyJWT
+passlib[bcrypt]
+google-auth
+requests
+gunicorn
+asyncpg
