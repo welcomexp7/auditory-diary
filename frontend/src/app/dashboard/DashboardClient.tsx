@@ -2,7 +2,7 @@
 
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
-import { useRouter, useSearchParams } from "next/navigation";
+import { useRouter } from "next/navigation";
 
 // ---------- 타입 정의 ----------
 interface DiaryTrack {
@@ -93,7 +93,6 @@ function LogoutModal({ isOpen, onConfirm, onCancel }: { isOpen: boolean; onConfi
 // ---------- 메인 컴포넌트 ----------
 export default function Dashboard() {
     const router = useRouter();
-    const searchParams = useSearchParams();
 
     const [diaries, setDiaries] = useState<DiaryEntry[]>([]);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
@@ -151,13 +150,13 @@ export default function Dashboard() {
 
     useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
 
-    // Spotify 연동 후 자동 새로고침
+    // Spotify 연동 후 자동 새로고침 (window.location.search 사용 — useSearchParams SSR 이슈 회피)
     useEffect(() => {
-        if (searchParams.get("spotify") === "connected") {
+        if (typeof window !== "undefined" && window.location.search.includes("spotify=connected")) {
             setSpotifyConnected(true);
             loadDashboardData();
         }
-    }, [searchParams, loadDashboardData]);
+    }, [loadDashboardData]);
 
     // 로그아웃 확정 핸들러
     const handleLogoutConfirm = () => {
