@@ -2,6 +2,7 @@
 services:
   - type: web
     name: auditory-diary-api
+    plan: free
     runtime: python
     region: singapore  # 한국에서 가장 가까운 리전
     rootDir: backend
@@ -26,6 +27,8 @@ services:
         sync: false
       - key: SECRET_KEY
         generateValue: true
+
+
 
 
 databases:
