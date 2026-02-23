@@ -14,15 +14,24 @@ export default function DailyCapsuleCard({ dateStr, aiSummary, representativeIma
     const cardRef = useRef<HTMLDivElement>(null);
     const [isDownloading, setIsDownloading] = useState(false);
 
+    // Spotify CDN 이미지를 백엔드 프록시를 경유하여 CORS 없이 로드 (html2canvas 호환성 확보)
+    const getProxiedImageUrl = (url: string | null) => {
+        if (!url) return null;
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+        return `${API_URL}/capsules/image-proxy?url=${encodeURIComponent(url)}`;
+    };
+
+    const proxiedImage = getProxiedImageUrl(representativeImageUrl);
+
     const handleDownload = async () => {
         if (!cardRef.current) return;
         try {
             setIsDownloading(true);
             const canvas = await html2canvas(cardRef.current, {
-                useCORS: true, // 필수: 외부 CDN 이미지 로드를 위함
-                allowTaint: true,
+                useCORS: true,
+                allowTaint: false,
                 backgroundColor: "#0d0d0f",
-                scale: 2 // 고해상도
+                scale: 2
             });
 
             const image = canvas.toDataURL("image/png", 1.0);
@@ -54,14 +63,13 @@ export default function DailyCapsuleCard({ dateStr, aiSummary, representativeIma
                 }}
             >
                 {/* Background Image with heavy blur */}
-                {representativeImageUrl && (
+                {proxiedImage && (
                     <div
                         className="absolute inset-0 z-0 opacity-40 mix-blend-screen overflow-hidden pointer-events-none"
                     >
                         <img
-                            src={representativeImageUrl}
+                            src={proxiedImage}
                             alt="Background Blur"
-                            crossOrigin="anonymous"
                             className="w-full h-full object-cover blur-3xl scale-125 saturate-150"
                         />
                     </div>
@@ -88,10 +96,9 @@ export default function DailyCapsuleCard({ dateStr, aiSummary, representativeIma
                             transition={{ duration: 1, delay: 0.2 }}
                             className="relative w-48 h-48 sm:w-56 sm:h-56 rounded-full shadow-[0_0_40px_rgba(0,0,0,0.8)] border-4 border-zinc-900 overflow-hidden"
                         >
-                            {representativeImageUrl ? (
+                            {proxiedImage ? (
                                 <img
-                                    src={representativeImageUrl}
-                                    crossOrigin="anonymous"
+                                    src={proxiedImage}
                                     className="w-full h-full object-cover animate-[spin_20s_linear_infinite]"
                                     style={{ animationPlayState: 'running' }}
                                 />

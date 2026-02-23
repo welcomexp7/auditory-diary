@@ -1,4 +1,5 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi.responses import Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -162,3 +163,39 @@ async def get_daily_capsule(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"AI Daily Capsule 조회 중 오류가 발생했습니다: {str(e)}"
         )
+
+@router.get("/image-proxy")
+async def image_proxy(url: str = Query(..., description="프록시할 이미지 URL")):
+    """
+    [이미지 프록시]
+    Spotify CDN 등 외부 이미지를 백엔드를 경유하여 CORS-safe하게 전달합니다.
+    html2canvas가 tainted canvas 에러 없이 캡처할 수 있도록 지원합니다.
+    """
+    import httpx
+    
+    # 안전한 도메인만 허용 (스팸/악용 방지)
+    allowed_domains = ["i.scdn.co", "mosaic.scdn.co", "image-cdn-ak.spotifycdn.com", "image-cdn-fa.spotifycdn.com"]
+    from urllib.parse import urlparse
+    parsed = urlparse(url)
+    if parsed.hostname not in allowed_domains:
+        raise HTTPException(status_code=400, detail="허용되지 않은 이미지 도메인입니다.")
+    
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, timeout=10.0)
+            if resp.status_code != 200:
+                raise HTTPException(status_code=resp.status_code, detail="이미지를 가져올 수 없습니다.")
+            
+            content_type = resp.headers.get("content-type", "image/jpeg")
+            return Response(
+                content=resp.content,
+                media_type=content_type,
+                headers={
+                    "Access-Control-Allow-Origin": "*",
+                    "Cache-Control": "public, max-age=86400"
+                }
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(status_code=504, detail="이미지 요청 시간 초과")
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이미지 프록시 에러: {str(e)}")
