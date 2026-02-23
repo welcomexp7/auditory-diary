@@ -8,9 +8,26 @@ import datetime
 
 from app.infrastructure.db.database import get_db_session
 from app.infrastructure.db.models import DailyCapsuleORM, AuditoryDiaryORM
-from app.presentation.routers.auth import get_current_user_id
 from app.presentation.schemas.capsule_schemas import CapsuleCreateRequest, DailyCapsuleResponse
 from app.application.ai_client import AICapsuleClient
+from app.core.config import settings
+from fastapi import Request
+import jwt
+
+async def get_current_user_id(request: Request) -> uuid.UUID:
+    """JWT 토큰을 디코딩하여 현재 유저의 UUID를 반환합니다."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="인증 토큰이 없습니다.")
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            raise ValueError("Token missing sub")
+        return uuid.UUID(user_id_str)
+    except Exception:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
 
 router = APIRouter(prefix="/capsules", tags=["Capsules"])
 ai_client = AICapsuleClient()
