@@ -8,6 +8,20 @@
 - [x] UI/UX 개선: 게스트 모드 뒤로가기, 반응형 및 텍스트/이미지 깨짐 수정
 - [x] (옵션) 모바일 웹 Geolocation API 연동 및 Background Sync 테스트
 
+## 프론트엔드 UI 리디자인 (Phase 2)
+- [x] Aceternity UI 셋업 (`clsx`, `tailwind-merge` 설치 및 `cn` 유틸리티 추가)
+- [x] 랜딩 페이지(`page.tsx`) 모던 스큐어모피즘 리디자인 (LP/카세트 테이프 메타포 적용)
+- [x] 메인 대시보드(`DashboardClient.tsx`) 물리적 다이어리 질감 + 글래스모피즘(Glassmorphism) 기반 타임라인 개편
+- [x] 오디오 재생/음악 테마에 맞는 인터랙티브 컴포넌트 추가 (Framer Motion 심화)
+
+## 랜딩 페이지 및 Aceternity UI 도입 (Phase 3: Musitory LP)
+- [x] Hero Section 구현: Aurora Background를 활용하여 사운드웨이브 느낌의 첫 화면 구성
+- [x] Feature Section 구현: Bento Grid를 활용하여 Musitory 핵심 기능(음악 연동, 감정 기록 등) 시각화
+- [x] Scroll Interaction 구현: Sticky Scroll Reveal로 서비스 이용 플로우(로그인 -> 플레이 -> 기록) 안내
+- [x] Sample Showcase 구현: Infinite Moving Cards를 활용한 다른 유저들의 공개 다이어리 엿보기
+- [x] CTA (Call to Action) 구현: Background Beams를 활용하여 하단에서 서비스 시작 유도
+- [x] 모바일/태블릿 반응형 브레이크포인트 최적화 및 접근성 점검
+
 ## 백엔드 API (FastAPI, Python)
 - [x] FastAPI 프로젝트 초기화 및 Pydantic 기반 도메인 모델(Entity, Value Object) 정의
 - [x] User 인증 (Google OAuth) 및 Spotify 연동 시스템 구축
@@ -20,3 +34,11 @@
 - [x] DB 스키마 설계 (`users`, `tracks`, `contexts`, `auditory_diaries` 테이블)
 - [x] SQLAlchemy / SQLModel 등을 활용한 인프라스트럭처 레포지토리 세팅
 - [x] 환경 변수 설정 스크립트 작성 및 로컬 DB 구동 환경 구성
+
+## Phase 4: 과거 기록 조회 (Calendar & Timeline History)
+- [x] [DB/데이터] `AuditoryDiary` 모델에 날짜 기반 인덱싱 및 집계(Group By) 쿼리 리서치.
+- [x] [백엔드] `/api/diaries/calendar/monthly` 엔드포인트 구현 (특정 연/월의 날짜별 기록 갯수 및 대표 썸네일 반환).
+- [x] [백엔드] `/api/diaries/history` 엔드포인트 구현 (특정 날짜의 일기 타임라인 반환, 사용자 권한 및 Timezone 격리 적용).
+- [x] [프론트엔드] 대시보드 타이틀 하단에 가로 스크롤 가능한 '미니 달력(Horizontal Calendar)' 네비게이터 UI 구현 (Glassmorphism 테마 적용).
+- [x] [프론트엔드] 달력 날짜 칩 클릭 시 상태(selectedDate) 업데이트 로직 및 하단 타임라인 API 재호출 연동.
+- [x] [프론트엔드] 해당 날짜에 기록이 없는 경우에 표시될 "이 날은 무얼 했을까요.." UI(Empty State) 추가.

@@ -77,3 +77,56 @@ class DiaryService:
         )
         
         return await self.repo.save(diary)
+
+    async def sync_recently_played(
+        self, user_id: uuid.UUID, spotify_access_token: str, limit: int = 10
+    ) -> List[Any]:
+        """
+        [Sync-on-Demand] 
+        사용자의 최근 스포티파이 재생 목록을 가져와서 DB에 저장(없으면 생성)한 뒤,
+        UUID가 부여된 최신 상태의 다이어리 ORM 리스트를 반환합니다.
+        """
+        import datetime
+        
+        items = await self.spotify_client.get_recently_played(spotify_access_token, limit=limit)
+        
+        result_orms = []
+        for item in items:
+            track_data = item.get("track", {})
+            played_at_str = item.get("played_at")
+            if not track_data or not played_at_str:
+                continue
+                
+            try:
+                # ISO8601 parsing (Z -> +00:00 for compatibility)
+                played_at = datetime.datetime.fromisoformat(played_at_str.replace("Z", "+00:00"))
+            except Exception:
+                continue
+
+            track = DomainTrack(
+                title=track_data.get("name", "Unknown Title"),
+                artist=", ".join([a.get("name") for a in track_data.get("artists", [])]),
+                album_artwork_url=track_data.get("album", {}).get("images", [{}])[0].get("url"),
+                external_platform_id=track_data.get("id", ""),
+                platform_name="spotify"
+            )
+            
+            context = DomainContext(
+                place_name="Spotify에서 재생",
+                weather="",
+                timezone="UTC"
+            )
+            
+            diary_domain = DomainDiary(
+                id=uuid.uuid4(),
+                user_id=user_id,
+                track=track,
+                context=context,
+                listened_at=played_at,
+                memo=None
+            )
+            
+            diary_orm = await self.repo.get_or_create_by_listened_at(diary_domain)
+            result_orms.append(diary_orm)
+            
+        return result_orms
