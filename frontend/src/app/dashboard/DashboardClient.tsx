@@ -30,6 +30,7 @@ interface CapsuleData {
     target_date: string;
     ai_summary: string;
     representative_image_url: string | null;
+    theme: string;
 }
 
 interface CalendarSummary {
@@ -722,6 +723,7 @@ export default function Dashboard() {
                                     dateStr={selectedDate}
                                     aiSummary={capsuleData.ai_summary}
                                     representativeImageUrl={capsuleData.representative_image_url}
+                                    theme={capsuleData.theme as any}
                                 />
                             ) : null}
                         </motion.div>

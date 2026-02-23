@@ -53,6 +53,7 @@ class DailyCapsuleORM(Base):
     target_date = Column(Date, nullable=False, index=True)
     ai_summary = Column(Text, nullable=False)
     representative_image_url = Column(String, nullable=True)
+    theme = Column(String, nullable=False, default="aura", server_default="aura")
     
     created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
 

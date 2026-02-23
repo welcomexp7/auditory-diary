@@ -167,3 +167,21 @@ ew Date()가 이를 로컬 시간(KST)으로 오해하여 결과적으로 KST �
 ###  재발 방지 (Prevention Rule)
 - **[KST Forced View Rule]** 도메인 시간 기준이 KST인 앱에서는, 프론트엔드가 날짜와 시간을 화면에 그릴 때 절대 \
 ew Date().toLocaleTimeString()\ 같이 아무 옵션 없이 브라우저 시간에 의존하도록 놔두면 안 된다. 반드시 \{ timeZone: 'Asia/Seoul' }\ 옵션을 명시하여 환경 독립성을 보장해야 한다.
+
+## [Error #21] Tailwind v4 `lab()`/`oklch()` 색상 함수와 `html2canvas` 렌더링 호환성 파괴 버그 (2026-02-23)
+
+### 문제 상황 (Symptom)
+1. 사용자가 '스토리 저장하기(Download)' 버튼을 클릭했을 때 이미지 다운로드가 먹통이 되며 콘솔에 `Error: Attempting to parse an unsupported color function "lab"` 에러가 출력됨.
+2. AI Daily Capsule(Gemini) 호출이 무료 할당량 소진으로 인해 `ResourceExhausted` 에러를 뿜었고, 이를 대비한 Fallback 문구가 UI에 노출되지 않음. 심지어 코드 수정 후에도 DB에 해당 에러 문구가 "캐싱(당일 1회 생성 원칙)"되어 있어 계속 노출됨.
+
+### 원인 분석 (Root Cause)
+1. **렌더링 라이브러리 호환성:** 프로젝트가 최근 출시된 Tailwind CSS v4를 사용하면서, 내부적으로 `rgba()` 대신 최신 색역(Color Space)인 `oklch()`나 `lab()` 함수를 CSS 변수로 적극 치환하기 시작함. 반면 구버전 스펙에 머물러 있는 `html2canvas`는 이를 파싱할 수 없어 DOM 순회 중 크래시가 발생.
+2. **AI 데이터 영속성 (Caching) 간과:** 하루에 한 번만 캡슐을 생성하도록 DB 락(Lock)이 걸려있어, 처음 1회 API 호출 시 터진 에러 메시지(ResourceExhausted) 자체가 DB(`ai_summary` 컬럼)에 그대로 영속화(Save)되었음. 백엔드 코드의 Fallback 로직을 아무리 고쳐도, 프론트는 DB에 저장된 어제의 실패 기록을 그대로 가져오기 때문에 UI 픽스가 체감되지 않음.
+
+### 해결책 (Solution)
+1. **[Hotfix -> Full-fix]**: `html2canvas`를 버리고 DOM 파싱 유연성이 조금 더 나은 `dom-to-image` 패키지로 캡처 로직 교체. `lab()` 파싱 에러 우회 완료.
+2. DB에 캐싱된 오염된 데이터(ResourceExhausted)를 파이썬 스크립트(sqlite3)로 직접 `DELETE` 쿼리하여 지운 후 다시 생성 테스트하여 정상 폴백(머금은 음악들이 위로가 되기를...) 작동을 확인. 
+
+### 재발 방지 (Prevention Rule)
+- **[CSS Next-Gen Rule]** 프론트엔드에서 최신 기술 스택(Tailwind v4)을 도입할 때는, DOM을 직접 파싱하는 레거시 화면 캡처, PDF 생성 라이브러리들(ex. html2canvas)의 최신 색상 함수(`lab`, `oklch`) 지원 여부를 반드시 사전 검증한다.
+- **[Error Propagation Rule]** 외부 AI API가 터졌을 때 발생한 시스템 에러 메시지(`Exception` 텍스트)를 그대로 DB의 유저 도메인 컬럼(`ai_summary`)에 `INSERT`하지 않는다. DB 영속화 전에 정제(Fallback 문자열 변환)를 반드시 먼저 수행하라.

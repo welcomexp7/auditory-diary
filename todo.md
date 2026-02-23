@@ -53,3 +53,13 @@
 - [x] "✨ Daily Capsule 생성하기" 버튼 추가 및 AI 로딩 스켈레톤 애니메이션 (Framer Motion)
 - [x] 생성된 Daily Capsule(앨범 아트 꼴라주 + AI 한 줄 평) 렌더링 카드 UI 구현
 - [x] HTML2Canvas를 활용해 캡슐 카드를 인스타그램 스토리 비율(9:16) 이미지로 다운로드/공유하는 기능 구현
+
+## Phase 5.5: Daily Capsule Redesign (UI/UX & AI Fallback)
+### [데이터 설계]
+- [x] 프론트엔드 DailyCapsule 상태 관리에 `Theme` 타입 도입 (Modern, Futuristic, Film, Retro)
+### [백엔드 API]
+- [x] `ai_client.py`: API 호출 실패(ResourceExhausted 등) 시 더미 텍스트 반환을 `tracks_context` 기반 '최빈 아티스트 중심 다이나믹 폴백' 문구로 고도화
+### [프론트엔드 UI]
+- [x] `daily-capsule-card.tsx`: 이미지 저장 직전(`isDownloading == true`), 무한 회전하는 LP 요소를 강제로 0도(`rotate-0`)로 정지시키는 동적 스타일링 적용
+- [x] `daily-capsule-card.tsx`: 4가지 캡슐 테마(배경, 폰트, 필터)를 스위칭할 수 있는 씬 상단 또는 하단 컨트롤러 UI 추가
+- [x] `daily-capsule-card.tsx`: AI 요약 멘트 부분의 탁한 디자인(배경/이모지)을 걷어내고 세련된 타이포그래피(인용구 표시, 세로/가로 배치 디자인)로 개편

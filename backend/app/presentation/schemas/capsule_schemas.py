@@ -19,6 +19,7 @@ class DailyCapsuleResponse(BaseModel):
     target_date: date
     ai_summary: str
     representative_image_url: Optional[str] = None
+    theme: str
     created_at: datetime
     
     model_config = {"from_attributes": True}

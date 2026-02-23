@@ -11,6 +11,7 @@ from app.infrastructure.db.database import get_db_session
 from app.infrastructure.db.models import DailyCapsuleORM, AuditoryDiaryORM
 from app.presentation.schemas.capsule_schemas import CapsuleCreateRequest, DailyCapsuleResponse
 from app.application.ai_client import AICapsuleClient
+from app.infrastructure.external.spotify_client import SpotifyAPIClient
 from app.core.config import settings
 from fastapi import Request
 import jwt
@@ -32,6 +33,7 @@ async def get_current_user_id(request: Request) -> uuid.UUID:
 
 router = APIRouter(prefix="/capsules", tags=["Capsules"])
 ai_client = AICapsuleClient()
+spotify_client = SpotifyAPIClient()
 
 @router.post("/generate", response_model=DailyCapsuleResponse)
 async def generate_daily_capsule(
@@ -87,33 +89,94 @@ async def generate_daily_capsule(
 
         # 4. LLM 프롬프트용 컨텍스트 정리
         tracks_context = []
+        artist_names_set: list[str] = []  # 장르 조회용 아티스트 이름 수집
         weathers = {}
         for d in diaries:
-            # 트랙 정보
             if d.track:
                 tracks_context.append(f"'{d.track.title}' by {d.track.artist}")
-            # 날씨 정보 집계
+                # 피처링 아티스트도 포함되었을 수 있으므로 첫 번째 아티스트만 추출
+                primary_artist = d.track.artist.split(",")[0].strip()
+                if primary_artist not in artist_names_set:
+                    artist_names_set.append(primary_artist)
             if d.context and d.context.weather:
                 w = d.context.weather
                 weathers[w] = weathers.get(w, 0) + 1
 
         majority_weather = max(weathers, key=weathers.get) if weathers else None
 
-        # 5. Gemini API 호출
+        # 4-1. Spotify API로 아티스트별 장르(Genre) 조회 — AI 프롬프트 품질 향상용
+        # Why: Audio Features API 폐기 이후, 장르가 LLM에게 곡의 무드를 추론시키는 핵심 단서
+        genres_map: dict[str, list[str]] = {}
+        try:
+            from app.infrastructure.db.user_models import UserORM
+            user = await session.get(UserORM, user_id)
+            if user and user.spotify_access_token:
+                genres_map = await spotify_client.get_artists_genres(
+                    access_token=user.spotify_access_token,
+                    artist_names=artist_names_set
+                )
+        except Exception as e:
+            # 장르 조회 실패해도 캡슐 생성은 계속 진행 (Graceful Degradation)
+            import logging
+            logging.getLogger(__name__).warning(f"Genre fetch skipped: {e}")
+
+        # 5. Gemini API 호출 (장르 컨텍스트 포함)
         ai_summary = await ai_client.generate_daily_summary(
             tracks_context=tracks_context,
-            majority_weather=majority_weather
+            majority_weather=majority_weather,
+            genres_map=genres_map
         )
 
-        # 6. 대표 앨범 아트 선정 (가장 많이 들었거나, 리스트 중앙값 등. 여기선 임의로 리스트 중간 곡 선택)
-        representative_image_url = diaries[len(diaries) // 2].track.album_artwork_url if diaries[len(diaries) // 2].track else None
+        # 6. 대표 앨범 아트 선정
+        # Why: AI 멘트가 최빈 아티스트 기반으로 생성되므로, LP 이미지도 동일 아티스트의
+        #      가장 최근 트랙 앨범아트를 사용하여 시각-텍스트 일체감을 확보합니다.
+        from collections import Counter
+        artist_play_counts = Counter()
+        artist_latest_artwork: dict[str, str] = {}  # 아티스트별 가장 최근 앨범아트
+
+        for d in reversed(diaries):  # 시간 역순 순회 → 첫 매칭이 '가장 최근'
+            if d.track:
+                primary = d.track.artist.split(",")[0].strip()
+                artist_play_counts[primary] += 1
+                if primary not in artist_latest_artwork and d.track.album_artwork_url:
+                    artist_latest_artwork[primary] = d.track.album_artwork_url
+
+        if artist_play_counts:
+            top_artist_name = artist_play_counts.most_common(1)[0][0]
+            representative_image_url = artist_latest_artwork.get(top_artist_name)
+        else:
+            representative_image_url = diaries[0].track.album_artwork_url if diaries[0].track else None
+
+        # 6-1. 자동 테마(Vibe) 매핑 엔진 (Genre-based Inference)
+        theme_scores = {"y2k": 0, "midnight": 0, "editorial": 0, "aura": 0}
+        
+        y2k_keywords = ["hip hop", "rap", "dance", "techno", "electronic", "house", "idol", "pop"]
+        midnight_keywords = ["r&b", "soul", "jazz", "indie", "ambient", "lo-fi", "chill", "blues"]
+        editorial_keywords = ["acoustic", "folk", "classical", "piano", "ost", "singer-songwriter"]
+        
+        if genres_map:
+            for artist, genres in genres_map.items():
+                for genre in genres:
+                    g = genre.lower()
+                    if any(k in g for k in y2k_keywords): theme_scores["y2k"] += 1
+                    if any(k in g for k in midnight_keywords): theme_scores["midnight"] += 1
+                    if any(k in g for k in editorial_keywords): theme_scores["editorial"] += 1
+        
+        # Determine winning theme (if scores are 0, defaults to 'aura')
+        determined_theme = "aura"
+        max_score = 0
+        for t_name, score in theme_scores.items():
+            if score > max_score:
+                max_score = score
+                determined_theme = t_name
 
         # 7. DB 저장
         new_capsule = DailyCapsuleORM(
             user_id=user_id,
             target_date=target_date,
             ai_summary=ai_summary,
-            representative_image_url=representative_image_url
+            representative_image_url=representative_image_url,
+            theme=determined_theme
         )
         session.add(new_capsule)
         await session.commit()

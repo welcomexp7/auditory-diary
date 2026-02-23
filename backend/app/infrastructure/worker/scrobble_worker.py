@@ -1,10 +1,12 @@
 import asyncio
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 import logging
+import httpx
 
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 
+from app.core.config import settings
 from app.infrastructure.db.database import AsyncSessionLocal
 from app.infrastructure.db.user_models import UserORM
 from app.infrastructure.external.spotify_client import SpotifyAPIClient
@@ -27,7 +29,55 @@ class ScrobbleWorker:
         if not user.spotify_access_token:
             return
 
-        # Token Refresh 로직 생략 (실제 구현 시 user.spotify_token_expires_at 확인 후 갱신 필요)
+        # Token Refresh 자동 갱신 로직 추가
+        now_utc = datetime.now(timezone.utc)
+        # SQLAlchemy가 datetime 인스턴스를 줄 때 naive offset-naive일 수 있어서 방어 처리
+        expires_at = user.spotify_token_expires_at
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=timezone.utc)
+
+        if expires_at and expires_at <= now_utc:
+            if user.spotify_refresh_token:
+                try:
+                    token_url = "https://accounts.spotify.com/api/token"
+                    payload = {
+                        "grant_type": "refresh_token",
+                        "refresh_token": user.spotify_refresh_token,
+                        "client_id": settings.SPOTIFY_CLIENT_ID,
+                        "client_secret": settings.SPOTIFY_CLIENT_SECRET,
+                    }
+                    headers = {"Content-Type": "application/x-www-form-urlencoded"}
+                    async with httpx.AsyncClient() as client:
+                        resp = await client.post(token_url, data=payload, headers=headers)
+                        if resp.status_code == 200:
+                            token_data = resp.json()
+                            user.spotify_access_token = token_data.get("access_token")
+                            
+                            expires_in = token_data.get("expires_in", 3600)
+                            user.spotify_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)
+                            
+                            if "refresh_token" in token_data:
+                                user.spotify_refresh_token = token_data.get("refresh_token")
+                                
+                            await session.commit()
+                            logger.info(f"Successfully refreshed Spotify token for: {user.email}")
+                        else:
+                            logger.error(f"Token refresh failed (revoked): {resp.text}")
+                            user.spotify_access_token = None
+                            user.spotify_refresh_token = None
+                            user.spotify_token_expires_at = None
+                            await session.commit()
+                            return
+                except Exception as e:
+                    logger.error(f"Error during token refresh for {user.email}: {e}")
+                    return
+            else:
+                logger.warning(f"No refresh token for {user.email}, discarding access_token.")
+                user.spotify_access_token = None
+                user.spotify_token_expires_at = None
+                await session.commit()
+                return
+
         try:
             # 1. 최근 재생 목록 가져오기
             recent_tracks = await self.spotify_client.get_recently_played(
@@ -59,6 +109,14 @@ class ScrobbleWorker:
             
         except Exception as e:
             logger.error(f"Failed to auto-scrobble for user {user.email}: {e}")
+            
+            # API 호출 시 권한 오류(토큰 만료나 앱 연동 해제 등) 발생하면 Invalidate 처리
+            if "expired or invalid" in str(e).lower() or getattr(e, "response", None) and getattr(e.response, "status_code", None) == 401:
+                logger.warning(f"Invalidating Spotify context for user {user.email} due to 401/expired error.")
+                user.spotify_access_token = None
+                user.spotify_refresh_token = None
+                user.spotify_token_expires_at = None
+                await session.commit()
 
     async def run(self):
         """
