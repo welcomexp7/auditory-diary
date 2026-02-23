@@ -138,11 +138,24 @@ async def get_my_recently_played(
             from sqlalchemy.future import select
             from sqlalchemy.orm import selectinload
             from app.infrastructure.db.models import AuditoryDiaryORM
+            from datetime import datetime, timezone, timedelta
+            
+            # 오늘(KST) 범위를 구해서 프론트엔드의 "Today" 뷰에는 오늘 들은 곡만 반환
+            kst_tz = timezone(timedelta(hours=9))
+            now_kst = datetime.now(timezone.utc).astimezone(kst_tz)
+            start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+            end_kst = start_kst + timedelta(days=1)
+            
+            start_utc = start_kst.astimezone(timezone.utc)
+            end_utc = end_kst.astimezone(timezone.utc)
+
             diary_ids = [d.id for d in diaries_orm]
             stmt = (
                 select(AuditoryDiaryORM)
                 .options(selectinload(AuditoryDiaryORM.track), selectinload(AuditoryDiaryORM.context))
                 .where(AuditoryDiaryORM.id.in_(diary_ids))
+                .where(AuditoryDiaryORM.listened_at >= start_utc)
+                .where(AuditoryDiaryORM.listened_at < end_utc)
                 .order_by(AuditoryDiaryORM.listened_at.desc())
             )
             result = await session.execute(stmt)
