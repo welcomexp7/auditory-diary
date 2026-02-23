@@ -79,16 +79,50 @@ class DiaryService:
         return await self.repo.save(diary)
 
     async def sync_recently_played(
-        self, user_id: uuid.UUID, spotify_access_token: str, limit: int = 10
+        self, user_id: uuid.UUID, session: Any, limit: int = 10
     ) -> List[Any]:
         """
         [Sync-on-Demand] 
         사용자의 최근 스포티파이 재생 목록을 가져와서 DB에 저장(없으면 생성)한 뒤,
         UUID가 부여된 최신 상태의 다이어리 ORM 리스트를 반환합니다.
+        (토큰이 만료된 경우 자동으로 Refresh Token을 사용해 갱신합니다)
         """
         import datetime
+        import httpx
+        from app.infrastructure.db.user_models import UserORM
+        from app.core.config import settings
         
-        items = await self.spotify_client.get_recently_played(spotify_access_token, limit=limit)
+        # 1. 유저 정보 로드
+        user = await session.get(UserORM, user_id)
+        if not user or not user.spotify_access_token:
+            return []
+
+        # 2. 토큰 만료 검사 및 자동 갱신
+        if user.spotify_token_expires_at and datetime.datetime.utcnow() >= user.spotify_token_expires_at:
+            if user.spotify_refresh_token:
+                token_url = "https://accounts.spotify.com/api/token"
+                payload = {
+                    "grant_type": "refresh_token",
+                    "refresh_token": user.spotify_refresh_token,
+                    "client_id": settings.SPOTIFY_CLIENT_ID,
+                    "client_secret": settings.SPOTIFY_CLIENT_SECRET,
+                }
+                async with httpx.AsyncClient() as client:
+                    resp = await client.post(token_url, data=payload)
+                    if resp.status_code == 200:
+                        token_data = resp.json()
+                        user.spotify_access_token = token_data.get("access_token")
+                        if "refresh_token" in token_data:
+                            user.spotify_refresh_token = token_data.get("refresh_token")
+                        expires_in = token_data.get("expires_in", 3600)
+                        user.spotify_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+                        await session.commit()
+                    else:
+                        print("Failed to refresh token:", resp.text)
+                        return [] # 갱신 실패 시 빈 배열
+
+        # 3. 데이터 동기화
+        items = await self.spotify_client.get_recently_played(user.spotify_access_token, limit=limit)
         
         result_orms = []
         for item in items:

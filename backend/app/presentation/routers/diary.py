@@ -129,7 +129,7 @@ async def get_my_recently_played(
         
         diaries_orm = await service.sync_recently_played(
             user_id=user.id,
-            spotify_access_token=user.spotify_access_token,
+            session=session,
             limit=10
         )
 

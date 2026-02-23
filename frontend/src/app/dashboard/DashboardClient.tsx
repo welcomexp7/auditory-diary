@@ -562,12 +562,18 @@ export default function Dashboard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                         </svg>
                         <p className="text-lg font-bold text-zinc-400 mb-2 tracking-wide block">
-                            {selectedDate === new Date().toISOString().split('T')[0] ? "아직 비어있는 일기장" : "빈 여백의 시간..."}
+                            {selectedDate === new Date().toISOString().split('T')[0]
+                                ? "아직 비어있는 일기장"
+                                : new Date(selectedDate) > new Date()
+                                    ? "아직 오지 않은 시간"
+                                    : "빈 여백의 시간..."}
                         </p>
                         <p className="text-sm text-zinc-600 text-center font-medium leading-relaxed">
                             {selectedDate === new Date().toISOString().split('T')[0]
                                 ? <>Spotify에서 음악을 재생하면<br />자동으로 이곳에 기록됩니다.</>
-                                : <>이 날은 음악과 함께한 기록이 없네요.<br />기억의 빈 페이지로 남아있습니다.</>
+                                : new Date(selectedDate) > new Date()
+                                    ? <>이 날엔 어떤 음악이 당신과 함께할까요?<br />미래의 기록을 기대해봅니다.</>
+                                    : <>이 날은 음악과 함께한 기록이 없네요.<br />기억의 빈 페이지로 남아있습니다.</>
                             }
                         </p>
                     </div>
