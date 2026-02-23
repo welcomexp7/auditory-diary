@@ -515,10 +515,10 @@ export default function Dashboard() {
                                                     <div className="flex justify-between items-start mb-1">
                                                         <p className="text-xs font-semibold text-emerald-400/80 uppercase tracking-widest flex items-center gap-1.5">
                                                             <div className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
-                                                            {date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' })}
+                                                            {date.toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Seoul' })}
                                                         </p>
                                                         <p className="text-[10px] text-zinc-600 uppercase tracking-wider">
-                                                            {date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric' })}
+                                                            {date.toLocaleDateString('ko-KR', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'Asia/Seoul' })}
                                                         </p>
                                                     </div>
 

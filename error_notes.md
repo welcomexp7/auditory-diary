@@ -150,3 +150,20 @@ ew Date()가 이를 로컬 시간(KST)으로 오해하여 결과적으로 KST �
 ###  재발 방지 (Prevention Rule)
 - **[Strict Origin Rule]** 로컬 환경의 접속 URL, API 엔드포인트, 콜백 주소를 언급하거나 설정할 때는 **단 하나라도 틀림없이 절대적으로 \127.0.0.1\로 고정하여 표기하고 안내한다.**
 - 절대 \localhost\라는 단어를 입에 올리지 않으며, 코드나 환경 변수 내부에서도 혼용을 원천 차단한다.
+
+
+## [Error #20] 브라우저 로컬 타임존 의존에 따른 UI 랜더링 시간 어긋남 잠재 위험 (2026-02-23)
+
+###  문제 상황 (Symptom)
+백엔드의 KST 필터링과 UTC 직렬화는 정상적으로 수정되었으나, 프론트엔드에서 Date 렌더링 시 \date.toLocaleTimeString()\을 사용할 때 명시적인 타임존 옵션이 없어, 사용자의 **로컬 브라우저 기기 환경(예: 해외 접속 또는 컴퓨터 시간/지역 설정 오류)**에 따라 KST가 아닌 다른 시간으로 보여질 잠재적인 버그(에러) 요인이 남아있었음.
+
+###  원인 분석 (Root Cause)
+- JS의 내장 Date 포맷팅 함수(\	oLocaleDateString\, \	oLocaleTimeString\)는 옵션을 주지 않으면 클라이언트(OS/브라우저)의 시스템 현재 시간대에 100% 종속됨.
+- 이 서비스는 '한국 시간(KST)'을 기준으로 자정 경계를 끊고 다이어리를 기록하므로, 해외에서 접속하든 타임존 설정이 잘못되었든 화면에는 무조건 통일된 KST로 보여져야 하는 **도메인 정책(Domain Policy)**이 코드에 하드코딩되지 못함.
+
+###  해결책 (Solution)
+- 프론트엔드의 화면 랜더링 로직(\DashboardClient.tsx\, \capsule/page.tsx\)에 사용된 모든 \	oLocale...\ 함수 인자에 \{ timeZone: 'Asia/Seoul' }\ 옵션을 강제로 주입하여 클라이언트 OS 환경에 관계없이 KST로 고정출력 하도록 렌더링 정책을 보완함.
+
+###  재발 방지 (Prevention Rule)
+- **[KST Forced View Rule]** 도메인 시간 기준이 KST인 앱에서는, 프론트엔드가 날짜와 시간을 화면에 그릴 때 절대 \
+ew Date().toLocaleTimeString()\ 같이 아무 옵션 없이 브라우저 시간에 의존하도록 놔두면 안 된다. 반드시 \{ timeZone: 'Asia/Seoul' }\ 옵션을 명시하여 환경 독립성을 보장해야 한다.

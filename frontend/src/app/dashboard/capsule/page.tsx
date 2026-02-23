@@ -102,8 +102,8 @@ export default function TimeCapsuleView() {
                     </div>
                     <div className="flex flex-col text-right space-y-1">
                         <span className="text-slate-400">When</span>
-                        <span className="font-medium">{date.toLocaleDateString()}</span>
-                        <span className="text-slate-500 text-xs">{date.toLocaleTimeString()}</span>
+                        <span className="font-medium">{date.toLocaleDateString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
+                        <span className="text-slate-500 text-xs">{date.toLocaleTimeString('ko-KR', { timeZone: 'Asia/Seoul' })}</span>
                     </div>
                 </div>
 
