@@ -79,16 +79,23 @@ class AuditoryDiaryRepository:
         if existing:
             return existing
             
-        # 신규 생성
-        track_orm = TrackORM(
-            id=uuid.uuid4(),
-            title=diary_domain.track.title,
-            artist=diary_domain.track.artist,
-            album_artwork_url=diary_domain.track.album_artwork_url,
-            external_platform_id=diary_domain.track.external_platform_id,
-            platform_name=diary_domain.track.platform_name
+        # 신규 생성 — 트랙은 external_platform_id로 기존 레코드를 먼저 조회 (UNIQUE 제약 방어)
+        existing_track_stmt = select(TrackORM).where(
+            TrackORM.external_platform_id == diary_domain.track.external_platform_id
         )
-        self.session.add(track_orm)
+        existing_track_result = await self.session.execute(existing_track_stmt)
+        track_orm = existing_track_result.scalar_one_or_none()
+
+        if not track_orm:
+            track_orm = TrackORM(
+                id=uuid.uuid4(),
+                title=diary_domain.track.title,
+                artist=diary_domain.track.artist,
+                album_artwork_url=diary_domain.track.album_artwork_url,
+                external_platform_id=diary_domain.track.external_platform_id,
+                platform_name=diary_domain.track.platform_name
+            )
+            self.session.add(track_orm)
 
         context_orm = ContextORM(
             id=uuid.uuid4(),
