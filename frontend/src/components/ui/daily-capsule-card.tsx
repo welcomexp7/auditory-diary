@@ -70,6 +70,7 @@ export default function DailyCapsuleCard({ dateStr, aiSummary, representativeIma
                         <img
                             src={proxiedImage}
                             alt="Background Blur"
+                            crossOrigin="anonymous"
                             className="w-full h-full object-cover blur-3xl scale-125 saturate-150"
                         />
                     </div>
@@ -99,6 +100,7 @@ export default function DailyCapsuleCard({ dateStr, aiSummary, representativeIma
                             {proxiedImage ? (
                                 <img
                                     src={proxiedImage}
+                                    crossOrigin="anonymous"
                                     className="w-full h-full object-cover animate-[spin_20s_linear_infinite]"
                                     style={{ animationPlayState: 'running' }}
                                 />

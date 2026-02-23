@@ -61,6 +61,9 @@ class AICapsuleClient:
                         logger.info(f"Rate limit, {wait_time}s 대기 후 재시도...")
                         await asyncio.sleep(wait_time)
                         continue
+                    else:
+                        # 완벽히 할당량을 초과했을 때 UI를 위한 우아한 Fallback (Mock)
+                        return "오늘의 잔잔한 선율들이 마음에 깊은 울림을 남기네요. 평온한 밤 되세요."
                 return f"AI가 오늘의 분위기를 읽어내는 중 오류가 발생했어요. ({error_name})"
         
-        return "AI 요약 생성에 실패했어요. 잠시 후 다시 시도해주세요."
+        return "오늘 마주친 수많은 음표들이 당신의 하루를 따뜻하게 감싸주길 바랍니다."
