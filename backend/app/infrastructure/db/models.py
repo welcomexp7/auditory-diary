@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Uuid
+from sqlalchemy import Column, String, Float, DateTime, ForeignKey, Uuid, Date, Text, UniqueConstraint
 from sqlalchemy.orm import relationship
 import uuid
 from datetime import datetime
@@ -43,3 +43,19 @@ class AuditoryDiaryORM(Base):
     # Relationships
     track = relationship("TrackORM", backref="diaries")
     context = relationship("ContextORM", backref="diaries")
+
+class DailyCapsuleORM(Base):
+    __tablename__ = "daily_capsules"
+
+    id = Column(Uuid(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(Uuid(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
+    
+    target_date = Column(Date, nullable=False, index=True)
+    ai_summary = Column(Text, nullable=False)
+    representative_image_url = Column(String, nullable=True)
+    
+    created_at = Column(DateTime(timezone=True), default=datetime.utcnow)
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'target_date', name='uq_user_target_date'),
+    )

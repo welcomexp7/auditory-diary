@@ -12,3 +12,5 @@ google-auth
 requests
 gunicorn
 asyncpg
+
+google-generativeai

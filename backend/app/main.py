@@ -26,11 +26,12 @@ app.add_middleware(
 )
 
 import asyncio
-from app.presentation.routers import auth, diary
+from app.presentation.routers import auth, diary, capsule
 from app.infrastructure.worker.scrobble_worker import start_auto_scrobbler
 
 app.include_router(auth.router, prefix="/api")
 app.include_router(diary.router, prefix="/api")
+app.include_router(capsule.router, prefix="/api")
 
 @app.on_event("startup")
 async def on_startup():

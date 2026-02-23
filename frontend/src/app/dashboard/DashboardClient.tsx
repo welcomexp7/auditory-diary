@@ -3,6 +3,7 @@
 import { motion, AnimatePresence } from "framer-motion";
 import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
+import DailyCapsuleCard from "@/components/ui/daily-capsule-card";
 
 // ---------- 타입 정의 ----------
 interface DiaryTrack {
@@ -22,6 +23,13 @@ interface DiaryEntry {
     context: DiaryContext;
     listened_at: string;
     memo?: string | null;
+}
+
+interface CapsuleData {
+    id: string;
+    target_date: string;
+    ai_summary: string;
+    representative_image_url: string | null;
 }
 
 interface CalendarSummary {
@@ -107,6 +115,10 @@ export default function Dashboard() {
     const [userName, setUserName] = useState("G");
     const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+    // AI Daily Capsule 상태
+    const [capsuleData, setCapsuleData] = useState<CapsuleData | null>(null);
+    const [isLoadingCapsule, setIsLoadingCapsule] = useState(false);
+
     const getKstDateString = (date: Date = new Date()) => {
         const kstOffset = 9 * 60; // Korea Standard Time is UTC+9
         const kstTime = new Date(date.getTime() + (kstOffset + date.getTimezoneOffset()) * 60000);
@@ -153,9 +165,10 @@ export default function Dashboard() {
                 fetchUrl = `${API_URL}/diaries/history?date=${selectedDate}`;
             }
 
-            const [res, statusRes] = await Promise.all([
+            const [res, statusRes, capsuleRes] = await Promise.all([
                 fetch(fetchUrl, { headers: { "Authorization": `Bearer ${token}` } }),
-                fetch(`${API_URL}/diaries/me/status`, { headers: { "Authorization": `Bearer ${token}` } })
+                fetch(`${API_URL}/diaries/me/status`, { headers: { "Authorization": `Bearer ${token}` } }),
+                fetch(`${API_URL}/capsules/me?date=${selectedDate}`, { headers: { "Authorization": `Bearer ${token}` } })
             ]);
 
             if (statusRes.ok) {
@@ -163,6 +176,13 @@ export default function Dashboard() {
                 setSpotifyConnected(statusData.spotify_connected);
             } else {
                 setSpotifyConnected(false);
+            }
+
+            if (capsuleRes.ok) {
+                const cData = await capsuleRes.json();
+                setCapsuleData(cData);
+            } else {
+                setCapsuleData(null);
             }
 
             if (res.ok) {
@@ -178,6 +198,35 @@ export default function Dashboard() {
         }
         setIsLoading(false);
     }, [selectedDate]);
+
+    const handleGenerateCapsule = async () => {
+        setIsLoadingCapsule(true);
+        const token = localStorage.getItem("access_token");
+        const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
+        try {
+            const res = await fetch(`${API_URL}/capsules/generate`, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "Authorization": `Bearer ${token}`
+                },
+                body: JSON.stringify({ target_date: selectedDate })
+            });
+
+            if (res.ok) {
+                const data = await res.json();
+                setCapsuleData(data);
+            } else {
+                const err = await res.json();
+                alert(`캡슐 생성 실패: ${err.detail || '알 수 없는 오류'}`);
+            }
+        } catch (error) {
+            console.error(error);
+            alert("캡슐 요청 중 오류가 발생했습니다.");
+        } finally {
+            setIsLoadingCapsule(false);
+        }
+    };
 
     useEffect(() => { loadDashboardData(); }, [loadDashboardData]);
 
@@ -471,11 +520,47 @@ export default function Dashboard() {
 
                 {/* ========== 타임라인 (Glassmorphism & Skeuomorphism) ========== */}
                 {!isLoading && diaries.length > 0 && (
-                    <div className="relative pl-10 md:pl-12 mt-8">
-                        {/* 왼쪽 타임라인 선 (Glowing) */}
-                        <div className="absolute left-[15px] md:left-[19px] top-6 bottom-0 w-0.5 bg-gradient-to-b from-emerald-500/80 via-zinc-800 to-transparent shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+                    <div className="relative pl-10 md:pl-12 mt-8 w-full max-w-4xl mx-auto">
 
-                        <div className="space-y-8">
+                        {/* Daily Capsule Section */}
+                        <div className="mb-16 -ml-10 md:-ml-12 w-[calc(100%+2.5rem)] md:w-[calc(100%+3rem)]">
+                            {isLoadingCapsule ? (
+                                <div className="w-full max-w-sm mx-auto aspect-[9/16] rounded-[2.5rem] bg-[#111113] animate-pulse border border-white/5 flex flex-col items-center justify-center p-8 shadow-2xl">
+                                    <div className="w-20 h-20 rounded-full border-4 border-emerald-500/30 border-t-emerald-400 animate-[spin_1.5s_ease-in-out_infinite] mb-8" />
+                                    <p className="text-emerald-400/80 font-mono text-sm tracking-widest text-center animate-pulse">
+                                        AI is curating your day...
+                                    </p>
+                                </div>
+                            ) : capsuleData ? (
+                                <DailyCapsuleCard
+                                    dateStr={selectedDate}
+                                    aiSummary={capsuleData.ai_summary}
+                                    representativeImageUrl={capsuleData.representative_image_url}
+                                />
+                            ) : (
+                                <motion.div
+                                    initial={{ opacity: 0, scale: 0.95 }}
+                                    animate={{ opacity: 1, scale: 1 }}
+                                    className="w-full flex justify-center py-6"
+                                >
+                                    <button
+                                        onClick={handleGenerateCapsule}
+                                        className="group relative px-8 py-4 rounded-full transition-all duration-500 bg-[#151518]/80 hover:bg-[#1a1a1e] backdrop-blur-xl border border-emerald-500/30 hover:border-emerald-400 shadow-[0_0_20px_rgba(16,185,129,0.1)] hover:shadow-[0_0_30px_rgba(16,185,129,0.3)] overflow-hidden"
+                                    >
+                                        <div className="absolute inset-0 bg-gradient-to-r from-emerald-500/0 via-emerald-500/10 to-emerald-500/0 translate-x-[-100%] group-hover:translate-x-[100%] transition-transform duration-1000 ease-in-out" />
+                                        <div className="relative z-10 flex items-center gap-3">
+                                            <span className="text-xl animate-pulse">✨</span>
+                                            <span className="text-emerald-400 font-medium tracking-wide">오늘의 AI 캡슐 만들기</span>
+                                        </div>
+                                    </button>
+                                </motion.div>
+                            )}
+                        </div>
+
+                        {/* 왼쪽 타임라인 선 (Glowing) */}
+                        <div className="absolute left-[15px] md:left-[19px] top-[24rem] bottom-0 w-0.5 bg-gradient-to-b from-emerald-500/80 via-zinc-800 to-transparent shadow-[0_0_10px_rgba(16,185,129,0.5)]" />
+
+                        <div className="space-y-8 relative z-10">
                             {diaries.map((diary, index) => {
                                 const date = new Date(diary.listened_at);
                                 return (

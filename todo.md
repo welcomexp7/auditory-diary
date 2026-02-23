@@ -42,3 +42,14 @@
 - [x] [프론트엔드] 대시보드 타이틀 하단에 가로 스크롤 가능한 '미니 달력(Horizontal Calendar)' 네비게이터 UI 구현 (Glassmorphism 테마 적용).
 - [x] [프론트엔드] 달력 날짜 칩 클릭 시 상태(selectedDate) 업데이트 로직 및 하단 타임라인 API 재호출 연동.
 - [x] [프론트엔드] 해당 날짜에 기록이 없는 경우에 표시될 "이 날은 무얼 했을까요.." UI(Empty State) 추가.
+
+## Phase 5: Interactive Features (AI Daily Capsule)
+### [데이터 설계]
+- [x] DB 스키마 업데이트: `daily_capsules` 신규 테이블 추가 (Alembic 마이그레이션 적용)
+### [백엔드 API]
+- [x] `/api/diaries/daily-capsule` (POST): 특정 날짜의 날씨, 플레이리스트 맥락을 OpenAI/Gemini API로 보내 AI 하루 요약 일기(문장)를 생성/저장하는 API 구현
+- [x] `/api/diaries/daily-capsule` (GET): 특정 날짜의 생성된 캡슐 내역 조회 API 구현
+### [프론트엔드 UI]
+- [x] "✨ Daily Capsule 생성하기" 버튼 추가 및 AI 로딩 스켈레톤 애니메이션 (Framer Motion)
+- [x] 생성된 Daily Capsule(앨범 아트 꼴라주 + AI 한 줄 평) 렌더링 카드 UI 구현
+- [x] HTML2Canvas를 활용해 캡슐 카드를 인스타그램 스토리 비율(9:16) 이미지로 다운로드/공유하는 기능 구현
