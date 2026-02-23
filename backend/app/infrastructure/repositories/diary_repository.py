@@ -139,44 +139,70 @@ class AuditoryDiaryRepository:
         """
         특정 월의 날짜별 다이어리 개수와 대표 트랙 썸네일(가장 최신 곡) 반환
         """
-        # SQLite와 PostgreSQL 차이로 인해 DATE 캐스팅은 RDBMS 의존적이나, SQLAlchemy cast(Date)로 추상화 시도
-        stmt = (
-            select(
-                cast(AuditoryDiaryORM.listened_at, Date).label('date_str'),
-                func.count(AuditoryDiaryORM.id).label('record_count'),
-                func.max(AuditoryDiaryORM.listened_at).label('latest_record_time')
-            )
-            .join(TrackORM, AuditoryDiaryORM.track_id == TrackORM.id)
-            .where(AuditoryDiaryORM.user_id == user_id)
-            .where(extract('year', AuditoryDiaryORM.listened_at) == year)
-            .where(extract('month', AuditoryDiaryORM.listened_at) == month)
-            .group_by(cast(AuditoryDiaryORM.listened_at, Date))
-            .order_by(cast(AuditoryDiaryORM.listened_at, Date))
-        )
-        result = await self.session.execute(stmt)
-        summaries = result.all()
-
-        final_response = []
-        for summary in summaries:
-            date_str = summary.date_str.strftime("%Y-%m-%d") if summary.date_str else ""
-            
-            # 대표 썸네일 조회를 위해 가장 늦게 들은 곡(latest_record_time)의 앨범 아트를 서브쿼리 대용으로 조회
-            latest_stmt = (
-                select(TrackORM.album_artwork_url)
-                .join(AuditoryDiaryORM, AuditoryDiaryORM.track_id == TrackORM.id)
-                .where(AuditoryDiaryORM.user_id == user_id)
-                .where(AuditoryDiaryORM.listened_at == summary.latest_record_time)
-                .limit(1)
-            )
-            thumb_res = await self.session.execute(latest_stmt)
-            thumbnail = thumb_res.scalar_one_or_none()
-
-            final_response.append({
-                "date": date_str,
-                "record_count": summary.record_count,
-                "representative_thumbnail": thumbnail
-            })
+        from datetime import datetime, timezone, timedelta
+        from sqlalchemy.orm import selectinload
         
+        kst_tz = timezone(timedelta(hours=9))
+        
+        # 1. KST 기준 해당 월의 시작과 끝 계산
+        # 시작: year-month-01 00:00:00 KST
+        start_kst = datetime(year, month, 1, 0, 0, 0, tzinfo=kst_tz)
+        
+        # 끝: 다음 달의 1일 00:00:00 KST
+        next_month = month + 1 if month < 12 else 1
+        next_year = year if month < 12 else year + 1
+        end_kst = datetime(next_year, next_month, 1, 0, 0, 0, tzinfo=kst_tz)
+        
+        # UTC로 변환하여 DB 검색 범위 설정
+        start_utc = start_kst.astimezone(timezone.utc)
+        end_utc = end_kst.astimezone(timezone.utc)
+        
+        # 2. 이번 달의 모든 다이어리 로드 (selectinload로 N+1 방지)
+        stmt = (
+            select(AuditoryDiaryORM)
+            .options(selectinload(AuditoryDiaryORM.track))
+            .where(AuditoryDiaryORM.user_id == user_id)
+            .where(AuditoryDiaryORM.listened_at >= start_utc)
+            .where(AuditoryDiaryORM.listened_at < end_utc)
+            .order_by(AuditoryDiaryORM.listened_at.asc()) # 시간순 정렬
+        )
+        
+        result = await self.session.execute(stmt)
+        diaries = result.scalars().all()
+        
+        # 3. 파이썬 메모리 상에서 KST 날짜를 기준으로 그룹핑 (DB 방언 종속 제거 및 정확도 향상)
+        summary_map = {}
+        
+        for diary in diaries:
+            # DB의 UTC를 KST로 변환
+            listened_kst = diary.listened_at.replace(tzinfo=timezone.utc).astimezone(kst_tz)
+            date_str = listened_kst.strftime("%Y-%m-%d")
+            
+            if date_str not in summary_map:
+                summary_map[date_str] = {
+                    "record_count": 0,
+                    "latest_record_time": listened_kst,
+                    "representative_thumbnail": diary.track.album_artwork_url if diary.track else None
+                }
+                
+            summary = summary_map[date_str]
+            summary["record_count"] += 1
+            
+            # 오름차순 정렬되어 있으므로 가장 마지막 값이 최신 값
+            summary["latest_record_time"] = listened_kst
+            summary["representative_thumbnail"] = diary.track.album_artwork_url if diary.track else None
+            
+        final_response = [
+            {
+                "date": date_str,
+                "record_count": data["record_count"],
+                "representative_thumbnail": data["representative_thumbnail"]
+            }
+            for date_str, data in summary_map.items()
+        ]
+        
+        # 날짜순 정렬
+        final_response.sort(key=lambda x: x["date"])
         return final_response
 
     async def get_daily_history(self, user_id: uuid.UUID, date_str: str) -> List[AuditoryDiaryORM]:

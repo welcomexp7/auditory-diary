@@ -162,7 +162,10 @@ async def spotify_callback(
             return RedirectResponse(f"{settings.FRONTEND_URL}/dashboard?spotify_error=no_user")
 
         user.spotify_access_token = token_data.get("access_token")
-        user.spotify_refresh_token = token_data.get("refresh_token")
+        
+        new_refresh = token_data.get("refresh_token")
+        if new_refresh:
+            user.spotify_refresh_token = new_refresh
 
         expires_in = token_data.get("expires_in", 3600)
         user.spotify_token_expires_at = datetime.utcnow() + timedelta(seconds=expires_in)

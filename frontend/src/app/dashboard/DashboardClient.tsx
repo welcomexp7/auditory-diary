@@ -107,8 +107,14 @@ export default function Dashboard() {
     const [userName, setUserName] = useState("G");
     const [showLogoutModal, setShowLogoutModal] = useState(false);
 
+    const getKstDateString = (date: Date = new Date()) => {
+        const kstOffset = 9 * 60; // Korea Standard Time is UTC+9
+        const kstTime = new Date(date.getTime() + (kstOffset + date.getTimezoneOffset()) * 60000);
+        return kstTime.toISOString().split('T')[0];
+    };
+
     // 달력 상태
-    const [selectedDate, setSelectedDate] = useState<string>(() => new Date().toISOString().split('T')[0]);
+    const [selectedDate, setSelectedDate] = useState<string>(() => getKstDateString());
     const [currentMonth, setCurrentMonth] = useState<Date>(() => new Date());
     const [calendarSummaries, setCalendarSummaries] = useState<CalendarSummary[]>([]);
 
@@ -138,7 +144,7 @@ export default function Dashboard() {
             const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
 
             // 오늘 날짜인지 확인
-            const localToday = new Date().toISOString().split('T')[0];
+            const localToday = getKstDateString();
             const isToday = selectedDate === localToday;
 
             let fetchUrl = `${API_URL}/diaries/me/recently-played`;
@@ -379,7 +385,7 @@ export default function Dashboard() {
                         <div className="flex overflow-x-auto gap-3 pb-4 snap-x border-b border-white/5 hide-scrollbar scroll-smooth">
                             {daysArray.map((day) => {
                                 const isSelected = selectedDate === day.dateStr;
-                                const isToday = day.dateStr === new Date().toISOString().split('T')[0];
+                                const isToday = day.dateStr === getKstDateString();
                                 const summary = calendarSummaries.find(s => s.date === day.dateStr);
                                 const hasRecord = summary && summary.record_count > 0;
 
@@ -562,16 +568,16 @@ export default function Dashboard() {
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1} d="M9 19V6l12-3v13M9 19c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zm12-3c0 1.105-1.343 2-3 2s-3-.895-3-2 1.343-2 3-2 3 .895 3 2zM9 10l12-3" />
                         </svg>
                         <p className="text-lg font-bold text-zinc-400 mb-2 tracking-wide block">
-                            {selectedDate === new Date().toISOString().split('T')[0]
+                            {selectedDate === getKstDateString()
                                 ? "아직 비어있는 일기장"
-                                : new Date(selectedDate) > new Date()
+                                : selectedDate > getKstDateString()
                                     ? "아직 오지 않은 시간"
                                     : "빈 여백의 시간..."}
                         </p>
                         <p className="text-sm text-zinc-600 text-center font-medium leading-relaxed">
-                            {selectedDate === new Date().toISOString().split('T')[0]
+                            {selectedDate === getKstDateString()
                                 ? <>Spotify에서 음악을 재생하면<br />자동으로 이곳에 기록됩니다.</>
-                                : new Date(selectedDate) > new Date()
+                                : selectedDate > getKstDateString()
                                     ? <>이 날엔 어떤 음악이 당신과 함께할까요?<br />미래의 기록을 기대해봅니다.</>
                                     : <>이 날은 음악과 함께한 기록이 없네요.<br />기억의 빈 페이지로 남아있습니다.</>
                             }
