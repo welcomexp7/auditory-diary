@@ -146,9 +146,69 @@ async def get_my_status(
     session: AsyncSession = Depends(get_db_session),
     user_id: uuid.UUID = Depends(get_current_user_id)
 ):
+    """
+    스포티파이 연동 상태를 실시간으로 검증합니다.
+    단순 DB 존재 여부가 아닌, 실제 Spotify API에 토큰을 보내 유효성을 확인합니다.
+    토큰이 만료되었으면 자동 갱신을 시도하고, 권한이 철회되었으면 DB에서 토큰을 삭제합니다.
+    """
+    import httpx
+    import datetime
     from app.infrastructure.db.user_models import UserORM
+    from app.core.config import settings
+
     user = await session.get(UserORM, user_id)
-    return {"spotify_connected": bool(user and user.spotify_access_token)}
+    if not user or not user.spotify_access_token:
+        return {"spotify_connected": False}
+
+    # 1. 토큰 만료 시 자동 갱신 시도
+    if user.spotify_token_expires_at and datetime.datetime.utcnow() >= user.spotify_token_expires_at:
+        if not user.spotify_refresh_token:
+            # Refresh Token 자체가 없으면 연동 해제 상태
+            user.spotify_access_token = None
+            user.spotify_token_expires_at = None
+            await session.commit()
+            return {"spotify_connected": False}
+
+        token_url = "https://accounts.spotify.com/api/token"
+        payload = {
+            "grant_type": "refresh_token",
+            "refresh_token": user.spotify_refresh_token,
+            "client_id": settings.SPOTIFY_CLIENT_ID,
+            "client_secret": settings.SPOTIFY_CLIENT_SECRET,
+        }
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(token_url, data=payload)
+            if resp.status_code == 200:
+                token_data = resp.json()
+                user.spotify_access_token = token_data.get("access_token")
+                if "refresh_token" in token_data:
+                    user.spotify_refresh_token = token_data["refresh_token"]
+                expires_in = token_data.get("expires_in", 3600)
+                user.spotify_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+                await session.commit()
+            else:
+                # 갱신 실패 = 권한 철회됨(invalid_grant 등) → DB 초기화
+                user.spotify_access_token = None
+                user.spotify_refresh_token = None
+                user.spotify_token_expires_at = None
+                await session.commit()
+                return {"spotify_connected": False}
+
+    # 2. 실제 Spotify API에 토큰을 보내 유효성 확인
+    async with httpx.AsyncClient() as client:
+        resp = await client.get(
+            "https://api.spotify.com/v1/me",
+            headers={"Authorization": f"Bearer {user.spotify_access_token}"}
+        )
+        if resp.status_code == 200:
+            return {"spotify_connected": True}
+        else:
+            # 401 등 → 권한 철회됨, DB 토큰 클리어
+            user.spotify_access_token = None
+            user.spotify_refresh_token = None
+            user.spotify_token_expires_at = None
+            await session.commit()
+            return {"spotify_connected": False}
 
 @router.get("/calendar/monthly", response_model=List[CalendarDaySummary])
 async def get_monthly_calendar_summary(
