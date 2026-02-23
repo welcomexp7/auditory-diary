@@ -14,10 +14,25 @@ from app.presentation.schemas.diary_schemas import DiaryCreateRequest, DiaryResp
 
 router = APIRouter(prefix="/diaries", tags=["Auditory Diary"])
 
-# TODO: 실제 운영 환경에서는 JWT Bearer Token 검증 미들웨어/Dependency를 통해 user_id 추출 필요
-async def get_current_user_id() -> uuid.UUID:
-    # 임시 목업 (실제로는 헤더의 토큰을 디코딩하여 UUID 반환)
-    return uuid.uuid4() 
+from fastapi import Request
+import jwt
+from app.core.config import settings
+
+async def get_current_user_id(request: Request) -> uuid.UUID:
+    """헤더의 JWT 토큰을 디코딩하여 현재 유저의 UUID를 식별합니다."""
+    auth_header = request.headers.get("Authorization")
+    if not auth_header or not auth_header.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="인증 토큰이 없습니다.")
+    
+    token = auth_header.split(" ")[1]
+    try:
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id_str = payload.get("sub")
+        if not user_id_str:
+            raise ValueError("Token missing sub")
+        return uuid.UUID(user_id_str)
+    except Exception:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
 
 @router.post("/", response_model=DiaryResponse)
 async def create_diary(
@@ -90,20 +105,16 @@ async def update_diary_memo(
 
 @router.get("/me/recently-played")
 async def get_my_recently_played(
-    session: AsyncSession = Depends(get_db_session)
+    session: AsyncSession = Depends(get_db_session),
+    user_id: uuid.UUID = Depends(get_current_user_id)
 ):
     """
     [Phase 5: Sync-on-Demand 적용]
     현재 로그인한 유저의 Spotify 최근 재생 목록을 가져와서 DB와 실시간 동기화(Upsert)한 후
     확인된 타임라인(UUID 포함)을 반환합니다.
     """
-    from sqlalchemy.future import select
     from app.infrastructure.db.user_models import UserORM
-
-    # 가장 최근 로그인한 유저 조회 (프로덕션: JWT 기반 current_user 의존성 사용)
-    stmt = select(UserORM).order_by(UserORM.created_at.desc()).limit(1)
-    result = await session.execute(stmt)
-    user = result.scalars().first()
+    user = await session.get(UserORM, user_id)
 
     if not user or not user.spotify_access_token:
         return {"diaries": [], "message": "Spotify 연동이 필요합니다."}
@@ -129,6 +140,15 @@ async def get_my_recently_played(
         import traceback
         traceback.print_exc()
         return {"diaries": [], "message": f"Spotify 데이터 조회 및 동기화 실패: {str(e)}"}
+
+@router.get("/me/status")
+async def get_my_status(
+    session: AsyncSession = Depends(get_db_session),
+    user_id: uuid.UUID = Depends(get_current_user_id)
+):
+    from app.infrastructure.db.user_models import UserORM
+    user = await session.get(UserORM, user_id)
+    return {"spotify_connected": bool(user and user.spotify_access_token)}
 
 @router.get("/calendar/monthly", response_model=List[CalendarDaySummary])
 async def get_monthly_calendar_summary(

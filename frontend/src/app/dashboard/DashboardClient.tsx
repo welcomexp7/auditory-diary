@@ -147,24 +147,22 @@ export default function Dashboard() {
                 fetchUrl = `${API_URL}/diaries/history?date=${selectedDate}`;
             }
 
-            const res = await fetch(fetchUrl, {
-                headers: { "Authorization": `Bearer ${token}` }
-            });
+            const [res, statusRes] = await Promise.all([
+                fetch(fetchUrl, { headers: { "Authorization": `Bearer ${token}` } }),
+                fetch(`${API_URL}/diaries/me/status`, { headers: { "Authorization": `Bearer ${token}` } })
+            ]);
+
+            if (statusRes.ok) {
+                const statusData = await statusRes.json();
+                setSpotifyConnected(statusData.spotify_connected);
+            } else {
+                setSpotifyConnected(false);
+            }
 
             if (res.ok) {
                 const data = await res.json();
                 const fetchedDiaries = isToday ? data.diaries : data; // history 응답은 리스트 자체, recently-played는 {diaries: []} 구조
-
-                if (fetchedDiaries && fetchedDiaries.length > 0) {
-                    setDiaries(fetchedDiaries);
-                    setSpotifyConnected(true);
-                } else {
-                    setDiaries([]);
-                    // 실시간(오늘)일 때만 Spotify 미연동 안내 렌더링하도록 조건부 처리 필요
-                    if (isToday) {
-                        setSpotifyConnected(data.message ? false : true);
-                    }
-                }
+                setDiaries(fetchedDiaries || []);
             } else {
                 setDiaries([]);
             }
@@ -439,7 +437,7 @@ export default function Dashboard() {
                 )}
 
                 {/* Spotify 미연동 안내 */}
-                {!isLoading && isLoggedIn && !spotifyConnected && diaries.length === 0 && (
+                {!isLoading && isLoggedIn && !spotifyConnected && (
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
