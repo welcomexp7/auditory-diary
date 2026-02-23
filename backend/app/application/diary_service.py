@@ -118,12 +118,25 @@ class DiaryService:
                         user.spotify_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
                         await session.commit()
                     else:
-                        print("Failed to refresh token:", resp.text)
+                        print("Failed to refresh token (likely revoked):", resp.text)
+                        # 유저가 스포티파이 앱 연동을 강제로 끊은 경우(invalid_grant 등) DB 초기화
+                        user.spotify_access_token = None
+                        user.spotify_refresh_token = None
+                        user.spotify_token_expires_at = None
+                        await session.commit()
                         return [] # 갱신 실패 시 빈 배열
 
         # 3. 데이터 동기화
-        items = await self.spotify_client.get_recently_played(user.spotify_access_token, limit=limit)
-        
+        try:
+            items = await self.spotify_client.get_recently_played(user.spotify_access_token, limit=limit)
+        except ValueError:
+            # 401 Unauthorized 등 토큰이 유효하지 않은 경우 (만료시간 전 앱 권한 철회 등)
+            user.spotify_access_token = None
+            user.spotify_refresh_token = None
+            user.spotify_token_expires_at = None
+            await session.commit()
+            return []
+            
         result_orms = []
         for item in items:
             track_data = item.get("track", {})

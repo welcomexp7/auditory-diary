@@ -98,3 +98,21 @@
 - **원인(Root Cause)**: 백엔드 `spotify_callback` 로직에서 OAuth 완료 후 Spotify가 던져준 토큰을 무조건 **'DB에서 가장 마지막으로 가입/생성된 유저(`order_by(created_at.desc()).limit(1)`)'** 에게 할당하는 하드코딩 목업(Mock) 코드가 프로덕션에 그대로 남아있었음. 브라우저가 다이렉트로 백엔드(`GET /auth/spotify/login`)로 넘어가기 때문에 JWT 헤더가 유실되어 내가 누군지 백엔드가 모르는 상태였음.
 - **해결**: `DashboardClient.tsx`에서 연동 버튼을 누를 때 쿼리스트링으로 `?token=${access_token}`을 백엔드에 넘김. ➡️ 백엔드(`auth.py`)가 토큰을 풀어서 `user_id`를 알아낸 후 스포티파이 `state` 파라미터에 집어넣어 보냄. ➡️ 스포티파이가 콜백 때 그 `state`를 그대로 돌려주면, 백엔드가 정확히 그 `user_id`를 찾아 토큰을 맵핑(Full-fix 적용).
 - **예방 규칙**: 브라우저 리다이렉트를 수반하는 OAuth 연동 흐름(Third-party Authentication)에서는 HTTP 인증 헤더(Bearer Token)가 유지되지 않으므로, **반드시 OAuth 표준의 `state` 파라미터를 활용**하여 요청자의 식별자를 끝까지 보존하는 세션 유지 설계를 필수로 해야 함.
+
+## 17. 스포티파이 연동/동기화 관련 연쇄 에러 및 아키텍처 반성문 (Retrospective)
+- **상황**: 데이터를 정상적으로 동기화하지 못하고 UI가 어긋나는 현상이 여러 계층(프론트, 백엔드 DB, 외부 연동)에 걸쳐 복합적으로 발생.
+- **원인 분석(Root Causes) 및 해결 카테고리**:
+  1. **[보안/세션 유지] OAuth State 누락**: 위 16번 항목과 동일. 사용자가 브라우저를 벗어났다 돌아올 때 식별자가 날아가 다른 유저에게 토큰이 갱신되는 심각한 오염 발생. `state` 파라미터와 `get_current_user_id` JWT Validation 연동으로 디커플링 및 보안 해결.
+  2. **[토큰 생명주기 관리] Refresh Token 재발급권 소멸 로직 부재**: 
+     - *문제*: `sync_recently_played`에서 1시간 뒤 Access Token이 만료됐을 때 갱신하는 로직 자체가 없었음.
+     - *문제2*: 재연동 시 Spotify가 `refresh_token`을 돌려주지 않을 때, DB에 강제로 `None`을 덮어씌워 영구적으로 갱신 불가 상태에 빠짐.
+     - *해결*: 토큰 만료 전 API 호출 시 자동 Refresh 하도록 서비스 레이어 보강. 콜백에서 `token_data.get('refresh_token')`이 존재할 때만 업데이트하도록 방어 코드 추가.
+  3. **[외부 의존성 상태 동기화] App 연동 강제 해제 감지 실패**: 
+     - *문제*: 유저가 스포티파이 사이트에서 앱 권한을 철회해도, 내부 DB에는 옛날 토큰이 남아있어 프론트엔드는 영원히 "연동됨"으로 착각. 버튼도 막힘.
+     - *해결*: 트래픽 호출(`get_recently_played` 또는 Token Refresh) 시 400/401(Invalid Grant 등) 에러를 맞으면 즉시 DB의 Token을 `None`으로 날리고 세션을 커밋하여, 프론트가 즉시 "연동 끊김" 상태를 인지하게 만듦.
+  4. **[글로벌 시차(Timezone) 동기화] KST vs UTC 불일치에 따른 데이터 증발**: 
+     - *문제*: 프론트 `Date.toISOString()`과 렌더 서버 DB(PostgreSQL)의 그룹핑 함수들이 UTC를 베이스로 돌면서 한국의 아침 9시 이전 데이터가 전부 전날로 그룹핑되거나 `isToday` 로직이 빗나감.
+     - *해결*: 프론트엔드 전역에 절대 기준인 KST(UTC+9) `getKstDateString` 헬퍼 함수를 적용. 백엔드 `diary_repository.py`에서는 DB 의존성 강한 Date Grouping 쿼리를 버리고, 범위 내 모든 객체를 가져와 **파이썬 메모리단에서 KST 시간대로 확실하게 Group By** 하도록 N+1 방지 튜닝 적용.
+- **최종 예방 규칙(Golden Rules)**: 
+  - 외부 연동 프로젝트 시, 외부 리소스(State, Token Lifecycle, App Permissions 제어권)는 언제든 사용자나 플랫폼에 의해 끊어지거나 만료될 수 있음을 가정하고, **API Exception을 Catch하여 내부 상태를 즉시 무효화(Invalidate)하는 방어 로직을 최우선으로 작성하라.**
+  - **날짜 기반 조회 로직은 시스템 클럭(UTC)에 암묵적으로 의존해선 안되며**, 클라이언트의 기준 Timezone을 명시적으로 파라미터로 받거나 하드코딩된 지역 표준시(KST)로 서버와 프론트 양쪽 모두 명시적 형변환을 거쳐야 한다.
