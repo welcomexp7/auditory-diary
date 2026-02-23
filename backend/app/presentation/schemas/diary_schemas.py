@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
@@ -43,6 +43,14 @@ class DiaryResponse(BaseModel):
     context: ContextSchema
     listened_at: datetime
     memo: Optional[str] = None
+
+    @field_validator('listened_at')
+    def ensure_timezone(cls, v: datetime) -> datetime:
+        # DB에서 가져온 timezone-naive datetime을 UTC로 명시
+        if v.tzinfo is None:
+            from datetime import timezone
+            return v.replace(tzinfo=timezone.utc)
+        return v
 
     model_config = {"from_attributes": True}
 
