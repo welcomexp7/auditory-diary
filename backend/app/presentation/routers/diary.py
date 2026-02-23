@@ -133,6 +133,21 @@ async def get_my_recently_played(
             limit=10
         )
 
+        # sync 후 관계가 expire될 수 있으므로, ID 목록으로 다시 selectinload 쿼리
+        if diaries_orm:
+            from sqlalchemy.future import select
+            from sqlalchemy.orm import selectinload
+            from app.infrastructure.db.models import AuditoryDiaryORM
+            diary_ids = [d.id for d in diaries_orm]
+            stmt = (
+                select(AuditoryDiaryORM)
+                .options(selectinload(AuditoryDiaryORM.track), selectinload(AuditoryDiaryORM.context))
+                .where(AuditoryDiaryORM.id.in_(diary_ids))
+                .order_by(AuditoryDiaryORM.listened_at.desc())
+            )
+            result = await session.execute(stmt)
+            diaries_orm = result.scalars().all()
+
         diaries_response = [DiaryResponse.model_validate(d) for d in diaries_orm]
         return {"diaries": diaries_response, "message": "Synced successfully"}
 

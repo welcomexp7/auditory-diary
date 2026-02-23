@@ -10,12 +10,16 @@ class TrackSchema(BaseModel):
     external_platform_id: str
     platform_name: str
 
+    model_config = {"from_attributes": True}
+
 class ContextSchema(BaseModel):
     latitude: Optional[float] = None
     longitude: Optional[float] = None
     place_name: Optional[str] = None
     weather: Optional[str] = None
     timezone: str = "UTC"
+
+    model_config = {"from_attributes": True}
 
 class DiaryCreateRequest(BaseModel):
     """
