@@ -130,7 +130,7 @@ async def get_my_recently_played(
         diaries_orm = await service.sync_recently_played(
             user_id=user.id,
             session=session,
-            limit=10
+            limit=50
         )
 
         # sync 후 관계가 expire될 수 있으므로, ID 목록으로 다시 selectinload 쿼리
