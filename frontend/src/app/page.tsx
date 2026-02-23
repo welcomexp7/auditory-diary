@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "@/hooks/useAuth";
-import { IconMusic } from "@tabler/icons-react";
+import { VinylRecord } from "@/components/landing/VinylRecord";
 
 export default function Home() {
   const { loginWithGoogle } = useAuth();
@@ -9,16 +9,16 @@ export default function Home() {
   return (
     <div className="flex flex-col min-h-screen bg-[#111113] text-slate-200 items-center justify-center p-4">
       <div className="max-w-md w-full flex flex-col items-center justify-center space-y-8 bg-[#151518] p-10 rounded-3xl border border-white/5 shadow-2xl">
-        <div className="flex flex-col items-center space-y-4">
-          <div className="w-16 h-16 bg-emerald-500/10 rounded-full flex items-center justify-center border border-emerald-500/20">
-            <IconMusic className="w-8 h-8 text-emerald-400" />
+        <div className="flex flex-col items-center space-y-6">
+          <VinylRecord />
+          <div className="text-center space-y-2">
+            <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-500">
+              Musitory
+            </h1>
+            <p className="text-zinc-500 text-sm">
+              당신의 매일을 음악과 함께 기록하세요.
+            </p>
           </div>
-          <h1 className="text-3xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-emerald-400 to-teal-500">
-            Musitory
-          </h1>
-          <p className="text-zinc-500 text-sm text-center">
-            당신의 매일을 음악과 함께 기록하세요.
-          </p>
         </div>
 
         <button

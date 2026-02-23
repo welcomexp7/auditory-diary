@@ -85,17 +85,28 @@ async def google_auth(
 
 
 @router.get("/spotify/login")
-async def spotify_login():
+async def spotify_login(token: str):
     """
     프론트엔드에서 스포티파이 연동 버튼 클릭 시 호출하여,
-    Spotify OAuth 동의 화면으로 리다이렉트 시키는 엔드포인트
+    Spotify OAuth 동의 화면으로 리다이렉트 시키는 엔드포인트.
+    사용자 식별을 위해 JWT 토큰을 쿼리파라미터로 받아 검증 후 state에 넣습니다.
     """
+    try:
+        # JWT 파싱하여 유저 ID 추출
+        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        user_id = payload.get("sub")
+        if not user_id:
+            raise ValueError()
+    except Exception:
+        raise HTTPException(status_code=401, detail="유효하지 않은 토큰입니다.")
+
     scope = "user-read-recently-played user-read-currently-playing"
     params = {
         "client_id": settings.SPOTIFY_CLIENT_ID,
         "response_type": "code",
         "redirect_uri": settings.SPOTIFY_REDIRECT_URI,
         "scope": scope,
+        "state": user_id,
         "show_dialog": "true"
     }
     url = f"https://accounts.spotify.com/authorize?{urllib.parse.urlencode(params)}"
@@ -105,15 +116,19 @@ async def spotify_login():
 @router.get("/spotify/callback")
 async def spotify_callback(
     code: str,
+    state: str,
     session: AsyncSession = Depends(get_db_session)
 ):
     """
     Spotify에서 사용자가 동의(Agree) 후 브라우저가 GET으로 리다이렉트되는 콜백.
     1. code를 받아 Spotify Token API로 access/refresh token 교환
-    2. 가장 최근 생성된 유저(로그인 유저)의 DB 레코드에 토큰 저장
+    2. state 파라미터(user_id)를 이용해 해당 유저 검색 및 토큰 업데이트
     3. 프론트엔드 대시보드로 리다이렉트
     """
     try:
+        if not state:
+            return RedirectResponse(f"{settings.FRONTEND_URL}/dashboard?spotify_error=no_state")
+
         # 1. Spotify Token API로 인가 코드 → 토큰 교환
         token_url = "https://accounts.spotify.com/api/token"
         payload = {
@@ -132,12 +147,16 @@ async def spotify_callback(
                 )
             token_data = resp.json()
 
-        # 2. 가장 최근 가입한 유저에게 토큰 저장 (프로덕션에선 JWT 기반 current_user 의존성 사용)
-        from sqlalchemy.future import select
+        # 2. state에 담긴 uuid로 유저 조회
+        import uuid
         from app.infrastructure.db.user_models import UserORM
-        stmt = select(UserORM).order_by(UserORM.created_at.desc()).limit(1)
-        result = await session.execute(stmt)
-        user = result.scalars().first()
+        
+        try:
+            user_uuid = uuid.UUID(state)
+        except ValueError:
+            return RedirectResponse(f"{settings.FRONTEND_URL}/dashboard?spotify_error=invalid_state")
+            
+        user = await session.get(UserORM, user_uuid)
 
         if not user:
             return RedirectResponse(f"{settings.FRONTEND_URL}/dashboard?spotify_error=no_user")

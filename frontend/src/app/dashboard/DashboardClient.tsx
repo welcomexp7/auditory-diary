@@ -338,7 +338,10 @@ export default function Dashboard() {
                                 </div>
                             ) : (
                                 <button
-                                    onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'}/auth/spotify/login`}
+                                    onClick={() => {
+                                        const token = localStorage.getItem('access_token');
+                                        window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'}/auth/spotify/login?token=${token}`;
+                                    }}
                                     className="group flex items-center gap-2 bg-[#1DB954] hover:bg-[#1ed760] text-black text-sm font-bold px-4 py-2 rounded-full transition-all hover:scale-105 active:scale-95 shadow-[0_4px_14px_rgba(29,185,84,0.4)]"
                                 >
                                     <svg className="w-4 h-4 transition-transform group-hover:rotate-12" viewBox="0 0 24 24" fill="currentColor">
@@ -451,7 +454,10 @@ export default function Dashboard() {
                         <h2 className="text-2xl font-bold text-white mb-3">Spotify를 연결해주세요</h2>
                         <p className="text-sm text-zinc-400 mb-8 max-w-xs leading-relaxed">최신 트랙들이 자동으로 감성적인 타임라인으로 기록됩니다.</p>
                         <button
-                            onClick={() => window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'}/auth/spotify/login`}
+                            onClick={() => {
+                                const token = localStorage.getItem('access_token');
+                                window.location.href = `${process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:8000/api'}/auth/spotify/login?token=${token}`;
+                            }}
                             className="bg-[#1DB954] hover:bg-[#1ed760] text-black font-extrabold px-8 py-4 rounded-full transition-transform hover:scale-105 active:scale-95 shadow-[0_4px_24px_rgba(29,185,84,0.3)]"
                         >
                             CONNECT SPOTIFY

@@ -92,3 +92,9 @@
 - **원인(Root Cause)**: 프로젝트는 Next.js 최신 버전에 맞춰 `react@19.2.3`을 사용 중이나, `lucide-react@0.378.0` 및 기타 UI 라이브러리들이 `peerDependencies`로 `<19.0.0` 버전만을 명시하고 있어 npm v10+의 엄격한 의존성 검사에 걸려 설치가 중단됨.
 - **해결**: 프론트엔드 루트 폴더(`frontend/.npmrc`)에 `legacy-peer-deps=true` 옵션을 담은 구성 파일을 생성하여, Vercel 환경에서 패키지를 설치할 때 의존성 버전 검사를 우회하도록 강제함.
 - **예방 규칙**: React 19 환경에서 최신이 아닌 UI 라이브러리들을 다수 섞어 쓸 경우, 배포 서버(Vercel)에서도 `--legacy-peer-deps` 옵션이 적용될 수 있도록 반드시 **`.npmrc` 파일을 활용**하여 충돌을 미연에 방지할 것.
+
+## 16. Spotify OAuth State 누락으로 인한 세션/식별자 맵핑 증발 (보안 및 연동 끊김)
+- **상황**: 대시보드에서 스포티파이 연동을 마쳤는데도 연동이 유지되지 않거나, 내가 아닌 다른 유저의 스포티파이 데이터가 뒤섞이는 현상이 발생할 수 있는 중대한 취약점 발견.
+- **원인(Root Cause)**: 백엔드 `spotify_callback` 로직에서 OAuth 완료 후 Spotify가 던져준 토큰을 무조건 **'DB에서 가장 마지막으로 가입/생성된 유저(`order_by(created_at.desc()).limit(1)`)'** 에게 할당하는 하드코딩 목업(Mock) 코드가 프로덕션에 그대로 남아있었음. 브라우저가 다이렉트로 백엔드(`GET /auth/spotify/login`)로 넘어가기 때문에 JWT 헤더가 유실되어 내가 누군지 백엔드가 모르는 상태였음.
+- **해결**: `DashboardClient.tsx`에서 연동 버튼을 누를 때 쿼리스트링으로 `?token=${access_token}`을 백엔드에 넘김. ➡️ 백엔드(`auth.py`)가 토큰을 풀어서 `user_id`를 알아낸 후 스포티파이 `state` 파라미터에 집어넣어 보냄. ➡️ 스포티파이가 콜백 때 그 `state`를 그대로 돌려주면, 백엔드가 정확히 그 `user_id`를 찾아 토큰을 맵핑(Full-fix 적용).
+- **예방 규칙**: 브라우저 리다이렉트를 수반하는 OAuth 연동 흐름(Third-party Authentication)에서는 HTTP 인증 헤더(Bearer Token)가 유지되지 않으므로, **반드시 OAuth 표준의 `state` 파라미터를 활용**하여 요청자의 식별자를 끝까지 보존하는 세션 유지 설계를 필수로 해야 함.

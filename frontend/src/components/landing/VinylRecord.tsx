@@ -16,8 +16,8 @@ export const VinylRecord = () => {
                 boxShadow:
                     "20px 20px 60px #070708, -20px -20px 60px #1b1b1e, inset 0 0 0 1px rgba(255,255,255,0.05)",
             }}
-            animate={isHovered ? { rotate: 360 } : {}}
-            transition={{ duration: 3, repeat: Infinity, ease: "linear" }}
+            animate={{ rotate: 360 }}
+            transition={{ duration: 4, repeat: Infinity, ease: "linear" }}
             onHoverStart={() => setIsHovered(true)}
             onHoverEnd={() => setIsHovered(false)}
         >
