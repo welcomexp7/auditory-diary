@@ -116,3 +116,37 @@
 - **최종 예방 규칙(Golden Rules)**: 
   - 외부 연동 프로젝트 시, 외부 리소스(State, Token Lifecycle, App Permissions 제어권)는 언제든 사용자나 플랫폼에 의해 끊어지거나 만료될 수 있음을 가정하고, **API Exception을 Catch하여 내부 상태를 즉시 무효화(Invalidate)하는 방어 로직을 최우선으로 작성하라.**
   - **날짜 기반 조회 로직은 시스템 클럭(UTC)에 암묵적으로 의존해선 안되며**, 클라이언트의 기준 Timezone을 명시적으로 파라미터로 받거나 하드코딩된 지역 표준시(KST)로 서버와 프론트 양쪽 모두 명시적 형변환을 거쳐야 한다.
+
+
+## [Error #18] 타임존 불일치 (UTC->KST) 및 기간 필터링 누락 (2026-02-23)
+
+###  문제 상황 (Symptom)
+1. 스포티파이 동기화 목록에서 '어제(22일)' 들은 곡이 '오늘(23일)' 대시보드 메인에 여전히 노출됨.
+2. 프론트엔드에서 재생 시간이 오후 2시가 아닌 오전 5시(UTC 기준 시간)로 -9시간 어긋나게 렌더링됨.
+
+###  원인 분석 (Root Cause)
+1. **기간 필터링 누락:** 백엔드에서 최대 50곡을 가져올 때, API가 단순히 '최근 50곡'을 반환하게 두어 과거 날짜의 곡까지 섞여서 Today 뷰로 응답됨.
+2. **타임존 마커 누락:** DB에 저장된 listened_at 타임스탬프(UTC)를 JSON 응답으로 내려줄 때 Z (UTC 식별자)가 빠져있어서, 프론트엔드의 
+ew Date()가 이를 로컬 시간(KST)으로 오해하여 결과적으로 KST 표시 시 -9시간이 발생함.
+
+###  해결책 (Solution)
+1. **KST 기준 Date Boundary:** /me/recently-played 라우터에서 KST 시간대 기준으로 '오늘 00:00 ~ 23:59' 범위만 쿼리 반환하도록 where() 필터링 로직 추가.
+2. **명시적 UTC 직렬화:** DiaryResponse 스키마에 Pydantic @field_validator('listened_at')를 추가하여 반환되는 datetime 객체가 명시적으로 	zinfo=timezone.utc를 가지도록 강제. 프론트엔드가 정확한 offset(+9)을 적용할 수 있게 됨.
+
+###  재발 방지 (Prevention Rule)
+- **[Timezone-Aware Rule]** DB에 Timestamp를 저장할 때와 클라이언트로 내보낼 때는 반드시 타임존 마커(UTC Z 또는 offset)를 명시적으로 붙여서 직렬화한다.
+- 프론트엔드의 View 성격(Today, History)에 맞게 백엔드 API 단에서 철저하게 Date boundary 필터링을 거친 후 응답한다.
+
+
+## [Error #19] localhost와 127.0.0.1 혼용으로 인한 OAuth/CORS 컨텍스트 파괴 (2026-02-23)
+
+###  문제 상황 (Symptom)
+로컬 개발 환경 테스트를 안내하면서 PM님께 접속 URL을 \http://localhost:3000\으로 잘못 안내함. PM님의 로컬 환경 및 OAuth 리다이렉트 설정(Spotify, Google 등)은 모두 \127.0.0.1\로 고정되어 있어, 브라우저가 다르게 인식하여 인증 세션이 깨지거나 리다이렉트가 엇갈리는 치명적 불편함 유발.
+
+###  원인 분석 (Root Cause)
+- 개발 편의상 \localhost\와 \127.0.0.1\을 무의식적으로 동일시하는 안일한 태도.
+- OAuth 2.0 스펙상 URI 매칭은 **Strict String Matching(엄격한 문자열 일치)**을 따르기 때문에, 도메인이 다르면 완전히 다른 출처(Origin)로 취급된다는 보안/웹 아키텍처의 기본 원칙을 간과함.
+
+###  재발 방지 (Prevention Rule)
+- **[Strict Origin Rule]** 로컬 환경의 접속 URL, API 엔드포인트, 콜백 주소를 언급하거나 설정할 때는 **단 하나라도 틀림없이 절대적으로 \127.0.0.1\로 고정하여 표기하고 안내한다.**
+- 절대 \localhost\라는 단어를 입에 올리지 않으며, 코드나 환경 변수 내부에서도 혼용을 원천 차단한다.

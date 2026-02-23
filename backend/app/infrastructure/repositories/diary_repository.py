@@ -217,11 +217,24 @@ class AuditoryDiaryRepository:
         YYYY-MM-DD 형식의 date_str을 받아서 해당 날짜의 전체 타임라인 반환
         presentation schema 변환을 위해 ORM 객체(Joined Load) 반환
         """
+        from datetime import datetime, timezone, timedelta
+        
+        # date_str (YYYY-MM-DD)를 KST 기준 00:00:00 ~ 23:59:59로 변환 후 UTC로 변환하여 쿼리
+        kst_tz = timezone(timedelta(hours=9))
+        target_date = datetime.strptime(date_str, "%Y-%m-%d").date()
+        
+        start_kst = datetime.combine(target_date, datetime.min.time()).replace(tzinfo=kst_tz)
+        end_kst = start_kst + timedelta(days=1)
+        
+        start_utc = start_kst.astimezone(timezone.utc)
+        end_utc = end_kst.astimezone(timezone.utc)
+
         stmt = (
             select(AuditoryDiaryORM)
             .options(selectinload(AuditoryDiaryORM.track), selectinload(AuditoryDiaryORM.context))
             .where(AuditoryDiaryORM.user_id == user_id)
-            .where(cast(AuditoryDiaryORM.listened_at, Date) == cast(date_str, Date))
+            .where(AuditoryDiaryORM.listened_at >= start_utc)
+            .where(AuditoryDiaryORM.listened_at < end_utc)
             .order_by(desc(AuditoryDiaryORM.listened_at))
         )
         result = await self.session.execute(stmt)
