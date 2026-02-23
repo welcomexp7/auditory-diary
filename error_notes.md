@@ -86,3 +86,9 @@
 - **원인(Root Cause)**: `handleMemoAdd` 함수 내부에 단순 React `setDiaries` 상태 업데이트만 존재하고 백엔드 DB에 저장하는 API 호출 로직이 아예 없었음. 또한 실시간 `recently-played`로 읽어온 곡들은 아직 Background Scrobbling(5분 주기)를 거치지 않아 DB의 진짜 식별자(UUID)가 없는 상태였는데, 이를 백엔드로 보내려는 아키텍처 결함도 존재.
 - **해결**: (Hotfix) UUID 자리수(길이 10 미만)를 체크하여 아직 DB에 동기화되지 않은 실시간 재생 곡은 알림창을 띄워 저장을 막음. (Full-fix) 백엔드에 `PATCH /api/diaries/{diary_id}/memo` 라우터와 DB 업데이트 메서드(`update_memo`)를 구현하고, 프론트에서 인증 토큰과 함께 메모 데이터를 쏴서 영속화시킴.
 - **예방 규칙**: 프론트엔드의 `React State` 변경은 반드시 **백엔드 리포지토리(DB) 업데이트 흐름(Fetch/Axios)** 이 일치하는지 체크할 것. 외부 API(Spotify) 데이터와 내부 DB 데이터를 혼용할 때는, 외부 데이터가 내부 DB에 적재되기 전(Sync 전) Primary Key 누락의 예외 상황을 설계 단계부터 철저히 대비할 것.
+
+## 15. Vercel 배포 시 React 19 Peer Dependency 충돌 (ERESOLVE)
+- **상황**: Vercel 배포 진행 중 `npm ERR! ERESOLVE could not resolve` 에러가 발생하며 `npm install` 단계에서 빌드가 실패함.
+- **원인(Root Cause)**: 프로젝트는 Next.js 최신 버전에 맞춰 `react@19.2.3`을 사용 중이나, `lucide-react@0.378.0` 및 기타 UI 라이브러리들이 `peerDependencies`로 `<19.0.0` 버전만을 명시하고 있어 npm v10+의 엄격한 의존성 검사에 걸려 설치가 중단됨.
+- **해결**: 프론트엔드 루트 폴더(`frontend/.npmrc`)에 `legacy-peer-deps=true` 옵션을 담은 구성 파일을 생성하여, Vercel 환경에서 패키지를 설치할 때 의존성 버전 검사를 우회하도록 강제함.
+- **예방 규칙**: React 19 환경에서 최신이 아닌 UI 라이브러리들을 다수 섞어 쓸 경우, 배포 서버(Vercel)에서도 `--legacy-peer-deps` 옵션이 적용될 수 있도록 반드시 **`.npmrc` 파일을 활용**하여 충돌을 미연에 방지할 것.
