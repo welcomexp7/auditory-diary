@@ -126,40 +126,42 @@ async def get_my_recently_played(
             weather_client=WeatherAPIClient(),
             location_client=LocationAPIClient()
         )
-        
-        diaries_orm = await service.sync_recently_played(
-            user_id=user.id,
-            session=session,
-            limit=50
-        )
 
-        # sync 후 관계가 expire될 수 있으므로, ID 목록으로 다시 selectinload 쿼리
-        if diaries_orm:
-            from sqlalchemy.future import select
-            from sqlalchemy.orm import selectinload
-            from app.infrastructure.db.models import AuditoryDiaryORM
-            from datetime import datetime, timezone, timedelta
-            
-            # 오늘(KST) 범위를 구해서 프론트엔드의 "Today" 뷰에는 오늘 들은 곡만 반환
-            kst_tz = timezone(timedelta(hours=9))
-            now_kst = datetime.now(timezone.utc).astimezone(kst_tz)
-            start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_kst = start_kst + timedelta(days=1)
-            
-            start_utc = start_kst.astimezone(timezone.utc)
-            end_utc = end_kst.astimezone(timezone.utc)
-
-            diary_ids = [d.id for d in diaries_orm]
-            stmt = (
-                select(AuditoryDiaryORM)
-                .options(selectinload(AuditoryDiaryORM.track), selectinload(AuditoryDiaryORM.context))
-                .where(AuditoryDiaryORM.id.in_(diary_ids))
-                .where(AuditoryDiaryORM.listened_at >= start_utc)
-                .where(AuditoryDiaryORM.listened_at < end_utc)
-                .order_by(AuditoryDiaryORM.listened_at.desc())
+        # Spotify 최근 재생 동기화 (best-effort: 실패해도 기존 DB 데이터는 반환)
+        try:
+            await service.sync_recently_played(
+                user_id=user.id,
+                session=session,
+                limit=50
             )
-            result = await session.execute(stmt)
-            diaries_orm = result.scalars().all()
+        except Exception as sync_err:
+            import logging
+            logging.getLogger(__name__).warning(f"Spotify sync 실패 (기존 DB 데이터로 진행): {sync_err}")
+
+        # 오늘(KST) 범위의 전체 다이어리를 DB에서 조회 (sync 결과와 무관)
+        from sqlalchemy.future import select
+        from sqlalchemy.orm import selectinload
+        from app.infrastructure.db.models import AuditoryDiaryORM
+        from datetime import datetime, timezone, timedelta
+
+        kst_tz = timezone(timedelta(hours=9))
+        now_kst = datetime.now(timezone.utc).astimezone(kst_tz)
+        start_kst = now_kst.replace(hour=0, minute=0, second=0, microsecond=0)
+        end_kst = start_kst + timedelta(days=1)
+
+        start_utc = start_kst.astimezone(timezone.utc)
+        end_utc = end_kst.astimezone(timezone.utc)
+
+        stmt = (
+            select(AuditoryDiaryORM)
+            .options(selectinload(AuditoryDiaryORM.track), selectinload(AuditoryDiaryORM.context))
+            .where(AuditoryDiaryORM.user_id == user_id)
+            .where(AuditoryDiaryORM.listened_at >= start_utc)
+            .where(AuditoryDiaryORM.listened_at < end_utc)
+            .order_by(AuditoryDiaryORM.listened_at.desc())
+        )
+        result = await session.execute(stmt)
+        diaries_orm = result.scalars().all()
 
         diaries_response = [DiaryResponse.model_validate(d) for d in diaries_orm]
         return {"diaries": diaries_response, "message": "Synced successfully"}
@@ -167,7 +169,7 @@ async def get_my_recently_played(
     except Exception as e:
         import traceback
         traceback.print_exc()
-        return {"diaries": [], "message": f"Spotify 데이터 조회 및 동기화 실패: {str(e)}"}
+        return {"diaries": [], "message": f"데이터 조회 실패: {str(e)}"}
 
 @router.get("/me/status")
 async def get_my_status(
