@@ -11,6 +11,7 @@ function SpotifyCallbackContent() {
     useEffect(() => {
         const handleCallback = async () => {
             const code = searchParams.get("code");
+            const state = searchParams.get("state");
             const error = searchParams.get("error");
 
             if (error) {
@@ -19,32 +20,29 @@ function SpotifyCallbackContent() {
                 return;
             }
 
-            if (!code) {
-                setStatus("인증 코드가 없습니다. 대시보드로 돌아갑니다.");
+            if (!code || !state) {
+                setStatus("인증 정보가 부족합니다. 대시보드로 돌아갑니다.");
                 setTimeout(() => router.push("/dashboard"), 2000);
                 return;
             }
 
             try {
-                // 저장해둔 로그인 유저 ID (실제 서비스에선 HttpOnly 쿠키의 세션 유지 권장)
-                // 지금은 더미 테스트이므로 임의의 "1" 을 전달하거나, 백엔드 의존성에서 JWT를 까서 처리해야 함
-                const dummyUserId = "1";
-
+                // Spotify OAuth 콜백에서 받은 code와 state(user_id)를
+                // 백엔드 GET 콜백 엔드포인트로 그대로 전달하여 토큰 교환 처리
                 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://127.0.0.1:8000/api";
-                const res = await fetch(`${API_URL}/auth/spotify/callback?user_id=${dummyUserId}`, {
-                    method: "POST",
-                    headers: {
-                        "Content-Type": "application/json",
-                    },
-                    body: JSON.stringify({ authorization_code: code }),
+                const callbackUrl = `${API_URL}/auth/spotify/callback?code=${encodeURIComponent(code)}&state=${encodeURIComponent(state)}`;
+
+                const res = await fetch(callbackUrl, {
+                    redirect: "manual",
                 });
 
-                if (!res.ok) {
+                // 백엔드가 RedirectResponse(302)를 반환 → manual 모드에서 opaqueredirect로 처리됨
+                if (res.type === "opaqueredirect" || res.ok || res.status === 302) {
+                    setStatus("스포티파이 연동이 완료되었습니다! 대시보드로 이동합니다.");
+                    setTimeout(() => router.push("/dashboard?spotify=connected"), 1500);
+                } else {
                     throw new Error("서버에서 연동 처리에 실패했습니다.");
                 }
-
-                setStatus("스포티파이 연동이 완료되었습니다! 대시보드로 이동합니다.");
-                setTimeout(() => router.push("/dashboard"), 2000);
 
             } catch (err: any) {
                 console.error(err);
