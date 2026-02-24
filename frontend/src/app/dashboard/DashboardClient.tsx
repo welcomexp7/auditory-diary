@@ -497,8 +497,8 @@ export default function Dashboard() {
                         </div>
                     )}
 
-                    {/* Spotify 미연동 안내 */}
-                    {!isLoading && isLoggedIn && !spotifyConnected && (
+                    {/* Spotify 미연동 안내 — 데이터가 있으면 타임라인을 보여주고, 데이터가 없을 때만 풀카드 표시 */}
+                    {!isLoading && isLoggedIn && !spotifyConnected && diaries.length === 0 && (
                         <motion.div
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}

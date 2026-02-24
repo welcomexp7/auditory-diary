@@ -116,19 +116,18 @@ async def get_my_recently_played(
     from app.infrastructure.db.user_models import UserORM
     user = await session.get(UserORM, user_id)
 
-    if not user or not user.spotify_access_token:
-        return {"diaries": [], "message": "Spotify 연동이 필요합니다."}
+    if not user:
+        return {"diaries": [], "message": "사용자를 찾을 수 없습니다."}
 
-    try:
-        service = DiaryService(
-            repository=AuditoryDiaryRepository(session),
-            spotify_client=SpotifyAPIClient(),
-            weather_client=WeatherAPIClient(),
-            location_client=LocationAPIClient()
-        )
-
-        # Spotify 최근 재생 동기화 (best-effort: 실패해도 기존 DB 데이터는 반환)
+    # Spotify 연동되어 있으면 최근 재생 동기화 시도 (best-effort)
+    if user.spotify_access_token:
         try:
+            service = DiaryService(
+                repository=AuditoryDiaryRepository(session),
+                spotify_client=SpotifyAPIClient(),
+                weather_client=WeatherAPIClient(),
+                location_client=LocationAPIClient()
+            )
             await service.sync_recently_played(
                 user_id=user.id,
                 session=session,
@@ -138,7 +137,8 @@ async def get_my_recently_played(
             import logging
             logging.getLogger(__name__).warning(f"Spotify sync 실패 (기존 DB 데이터로 진행): {sync_err}")
 
-        # 오늘(KST) 범위의 전체 다이어리를 DB에서 조회 (sync 결과와 무관)
+    try:
+        # 오늘(KST) 범위의 전체 다이어리를 DB에서 조회 (Spotify 연동 여부와 무관)
         from sqlalchemy.future import select
         from sqlalchemy.orm import selectinload
         from app.infrastructure.db.models import AuditoryDiaryORM
@@ -191,7 +191,9 @@ async def get_my_status(
         return {"spotify_connected": False}
 
     # 1. 토큰 만료 시 자동 갱신 시도
-    if user.spotify_token_expires_at and datetime.datetime.utcnow() >= user.spotify_token_expires_at:
+    # datetime.now(UTC) 사용 — utcnow()는 naive datetime이라 PostgreSQL의 timezone-aware와 비교 시 TypeError 발생
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    if user.spotify_token_expires_at and now_utc >= user.spotify_token_expires_at:
         if not user.spotify_refresh_token:
             # Refresh Token 자체가 없으면 연동 해제 상태
             user.spotify_access_token = None
@@ -214,7 +216,7 @@ async def get_my_status(
                 if "refresh_token" in token_data:
                     user.spotify_refresh_token = token_data["refresh_token"]
                 expires_in = token_data.get("expires_in", 3600)
-                user.spotify_token_expires_at = datetime.datetime.utcnow() + datetime.timedelta(seconds=expires_in)
+                user.spotify_token_expires_at = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=expires_in)
                 await session.commit()
             else:
                 # 갱신 실패 = 권한 철회됨(invalid_grant 등) → DB 초기화
