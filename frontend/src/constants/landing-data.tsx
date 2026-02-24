@@ -45,7 +45,7 @@ export const scrollContentsData = [
         description:
             "단 한 번의 클릭으로 Musitory에 첫 발을 내딛으세요. 복잡한 가입 절차 없이 빠르고 안전하게 시작할 수 있습니다. 당신의 일상은 소중하게 보관됩니다.",
         content: (
-            <div className="h-full w-full bg-[linear-gradient(to_bottom_right,var(--cyan-500),var(--emerald-500))] flex items-center justify-center text-white">
+            <div className="h-full w-full bg-gradient-to-br from-cyan-500 to-emerald-500 flex items-center justify-center text-white">
                 <IconDeviceMobile className="h-20 w-20 text-white/50" />
             </div>
         ),
@@ -55,7 +55,7 @@ export const scrollContentsData = [
         description:
             "당신의 재생 목록이 곧 일기장이 됩니다. Spotify 계정을 연결하면 지금 듣고 있는 음악이 자동으로 다이어리의 배경음악으로 기록됩니다.",
         content: (
-            <div className="h-full w-full bg-[linear-gradient(to_bottom_right,var(--pink-500),var(--indigo-500))] flex items-center justify-center text-white">
+            <div className="h-full w-full bg-gradient-to-br from-pink-500 to-indigo-500 flex items-center justify-center text-white">
                 <IconMusic className="h-20 w-20 text-white/50" />
             </div>
         ),
@@ -65,7 +65,7 @@ export const scrollContentsData = [
         description:
             "그 순간의 감정과 짧은 메모를 남기세요. 음악과 함께 저장된 기억은 시간이 지나도 생생하게 다시 꺼내어 볼 수 있는 당신만의 타임캡슐이 됩니다.",
         content: (
-            <div className="h-full w-full bg-[linear-gradient(to_bottom_right,var(--orange-500),var(--yellow-500))] flex items-center justify-center text-white">
+            <div className="h-full w-full bg-gradient-to-br from-orange-500 to-yellow-500 flex items-center justify-center text-white">
                 <IconMoodSmile className="h-20 w-20 text-white/50" />
             </div>
         ),

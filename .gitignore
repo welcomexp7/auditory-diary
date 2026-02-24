@@ -12,6 +12,7 @@ venv/
 
 # ===== Node.js / Frontend =====
 node_modules/
+/node_modules
 .next/
 out/
 *.tsbuildinfo
